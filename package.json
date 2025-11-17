@@ -1,0 +1,65 @@
+{
+  "name": "mcp-oauth-server",
+  "version": "0.0.1",
+  "description": "MCP first OAuth 2.1 Authorization Server",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "packageManager": "pnpm@10.22.0",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "type": "module",
+  "files": [
+    "./dist",
+    "./src",
+    "./example"
+  ],
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc",
+    "format": "prettier --check ./src ./example",
+    "build": "rollup -c rollup.config.js",
+    "example:server": "DEBUG=oauth:* tsx --watch example/index.ts",
+    "example:client": "tsx --watch node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleOAuthClient.js"
+  },
+  "author": "wille",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wille/mcp-oauth-server.git"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/debug": "^4.1.12",
+    "@types/express": "^5.0.5",
+    "@types/node": "^22.19.1",
+    "prettier": "^3.6.2",
+    "rollup": "^4.53.3",
+    "tslib": "^2.8.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.10"
+  },
+  "peerDependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "express": ">=4",
+    "express-rate-limit": ">=7.5",
+    "zod": "^3"
+  },
+  "dependencies": {
+    "debug": "^4.4.3"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "oauth2",
+    "oauth",
+    "server",
+    "modelcontextprotocol"
+  ]
+}
