@@ -11,7 +11,7 @@ export { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-util
 
 // Add the userId field to AuthInfo and return it in verifyAccessToken
 // and so we can access it after requireBearerAuth
-declare module '@modelcontextprotocol/sdk/server/auth/types' {
+declare module '@modelcontextprotocol/sdk/server/auth/types.js' {
     interface AuthInfo {
         userId: string;
     }
