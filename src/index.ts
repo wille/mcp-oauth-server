@@ -3,7 +3,6 @@ export type { OAuthServerModel } from './OAuthServerModel';
 export type { AccessToken, RefreshToken, AuthorizationCode } from './types';
 export { authenticateHandler } from './handlers/authenticate';
 export { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
-export { InvalidTargetError } from './InvalidTargetError';
 
 export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
 export { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';

@@ -13,11 +13,11 @@ import {
     InvalidTokenError,
     UnsupportedGrantTypeError,
     UnsupportedResponseTypeError,
+    InvalidTargetError,
 } from '@modelcontextprotocol/sdk/server/auth/errors.js';
 import crypto from 'node:crypto';
 import debug from 'debug';
 import { AccessToken, RefreshToken } from './types';
-import { InvalidTargetError } from './InvalidTargetError';
 import { OAuthServerModel } from './OAuthServerModel';
 import { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
 import { validateChallenge } from './pkce';
