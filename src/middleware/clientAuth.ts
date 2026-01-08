@@ -13,7 +13,7 @@ export type ClientAuthenticationMiddlewareOptions = {
 
 const ClientAuthenticatedRequestSchema = z.object({
     client_id: z.string(),
-    client_secret: z.string().optional()
+    client_secret: z.string().optional(),
 });
 
 declare module 'express-serve-static-core' {

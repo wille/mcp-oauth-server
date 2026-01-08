@@ -41,7 +41,7 @@ export function clientRegistrationHandler({
     clientsStore,
     clientSecretExpirySeconds = DEFAULT_CLIENT_SECRET_EXPIRY_SECONDS,
     rateLimit: rateLimitConfig,
-    clientIdGeneration = true
+    clientIdGeneration = true,
 }: ClientRegistrationHandlerOptions): RequestHandler {
     if (!clientsStore.registerClient) {
         throw new Error('Client registration store does not support registering clients');
@@ -65,8 +65,8 @@ export function clientRegistrationHandler({
                 standardHeaders: true,
                 legacyHeaders: false,
                 message: new TooManyRequestsError('You have exceeded the rate limit for client registration requests').toResponseObject(),
-                ...rateLimitConfig
-            })
+                ...rateLimitConfig,
+            }),
         );
     }
 
@@ -94,7 +94,7 @@ export function clientRegistrationHandler({
             let clientInfo: Omit<OAuthClientInformationFull, 'client_id'> & { client_id?: string } = {
                 ...clientMetadata,
                 client_secret: clientSecret,
-                client_secret_expires_at: clientSecretExpiresAt
+                client_secret_expires_at: clientSecretExpiresAt,
             };
 
             if (clientIdGeneration) {

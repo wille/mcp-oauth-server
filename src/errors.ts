@@ -8,7 +8,7 @@ export class OAuthError extends Error {
 
     constructor(
         message: string,
-        public readonly errorUri?: string
+        public readonly errorUri?: string,
     ) {
         super(message);
         this.name = this.constructor.name;
@@ -20,7 +20,7 @@ export class OAuthError extends Error {
     toResponseObject(): OAuthErrorResponse {
         const response: OAuthErrorResponse = {
             error: this.errorCode,
-            error_description: this.message
+            error_description: this.message,
         };
 
         if (this.errorUri) {
@@ -178,7 +178,7 @@ export class CustomOAuthError extends OAuthError {
     constructor(
         private readonly customErrorCode: string,
         message: string,
-        errorUri?: string
+        errorUri?: string,
     ) {
         super(message, errorUri);
     }
@@ -208,5 +208,5 @@ export const OAUTH_ERRORS = {
     [TooManyRequestsError.errorCode]: TooManyRequestsError,
     [InvalidClientMetadataError.errorCode]: InvalidClientMetadataError,
     [InsufficientScopeError.errorCode]: InsufficientScopeError,
-    [InvalidTargetError.errorCode]: InvalidTargetError
+    [InvalidTargetError.errorCode]: InvalidTargetError,
 } as const;

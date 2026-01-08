@@ -36,7 +36,7 @@ describe('allowedMethods', () => {
             expect(response.status).toBe(405);
             expect(response.body).toEqual({
                 error: 'method_not_allowed',
-                error_description: `The method ${method.toUpperCase()} is not allowed for this endpoint`
+                error_description: `The method ${method.toUpperCase()} is not allowed for this endpoint`,
             });
         }
     });

@@ -14,19 +14,19 @@ import { type Mock } from 'vitest';
 vi.mock('pkce-challenge', () => ({
     verifyChallenge: vi.fn().mockImplementation(async (verifier, challenge) => {
         return verifier === 'valid_verifier' && challenge === 'mock_challenge';
-    })
+    }),
 }));
 
 const mockTokens = {
     access_token: 'mock_access_token',
     token_type: 'bearer',
     expires_in: 3600,
-    refresh_token: 'mock_refresh_token'
+    refresh_token: 'mock_refresh_token',
 };
 
 const mockTokensWithIdToken = {
     ...mockTokens,
-    id_token: 'mock_id_token'
+    id_token: 'mock_id_token',
 };
 
 describe('Token Handler', () => {
@@ -34,7 +34,7 @@ describe('Token Handler', () => {
     const validClient: OAuthClientInformationFull = {
         client_id: 'valid-client',
         client_secret: 'valid-secret',
-        redirect_uris: ['https://example.com/callback']
+        redirect_uris: ['https://example.com/callback'],
     };
 
     // Mock client store
@@ -44,7 +44,7 @@ describe('Token Handler', () => {
                 return validClient;
             }
             return undefined;
-        }
+        },
     };
 
     // Mock provider
@@ -82,7 +82,7 @@ describe('Token Handler', () => {
                         access_token: 'new_mock_access_token',
                         token_type: 'bearer',
                         expires_in: 3600,
-                        refresh_token: 'new_mock_refresh_token'
+                        refresh_token: 'new_mock_refresh_token',
                     };
 
                     if (scopes) {
@@ -100,7 +100,7 @@ describe('Token Handler', () => {
                         token,
                         clientId: 'valid-client',
                         scopes: ['read', 'write'],
-                        expiresAt: Date.now() / 1000 + 3600
+                        expiresAt: Date.now() / 1000 + 3600,
                     };
                 }
                 throw new InvalidTokenError('Token is invalid or expired');
@@ -108,7 +108,7 @@ describe('Token Handler', () => {
 
             async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
                 // Do nothing in mock
-            }
+            },
         };
 
         // Mock PKCE verification
@@ -127,21 +127,21 @@ describe('Token Handler', () => {
             const response = await supertest(app).get('/token').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                grant_type: 'authorization_code'
+                grant_type: 'authorization_code',
             });
 
             expect(response.status).toBe(405);
             expect(response.headers.allow).toBe('POST');
             expect(response.body).toEqual({
                 error: 'method_not_allowed',
-                error_description: 'The method GET is not allowed for this endpoint'
+                error_description: 'The method GET is not allowed for this endpoint',
             });
         });
 
         it('requires grant_type parameter', async () => {
             const response = await supertest(app).post('/token').type('form').send({
                 client_id: 'valid-client',
-                client_secret: 'valid-secret'
+                client_secret: 'valid-secret',
                 // Missing grant_type
             });
 
@@ -153,7 +153,7 @@ describe('Token Handler', () => {
             const response = await supertest(app).post('/token').type('form').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                grant_type: 'password' // Unsupported grant type
+                grant_type: 'password', // Unsupported grant type
             });
 
             expect(response.status).toBe(400);
@@ -166,7 +166,7 @@ describe('Token Handler', () => {
             const response = await supertest(app).post('/token').type('form').send({
                 client_id: 'invalid-client',
                 client_secret: 'wrong-secret',
-                grant_type: 'authorization_code'
+                grant_type: 'authorization_code',
             });
 
             expect(response.status).toBe(400);
@@ -179,7 +179,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.status).toBe(200);
@@ -193,7 +193,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 // Missing code
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.status).toBe(400);
@@ -205,7 +205,7 @@ describe('Token Handler', () => {
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
-                code: 'valid_code'
+                code: 'valid_code',
                 // Missing code_verifier
             });
 
@@ -222,7 +222,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'invalid_verifier'
+                code_verifier: 'invalid_verifier',
             });
 
             expect(response.status).toBe(400);
@@ -236,7 +236,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'expired_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.status).toBe(400);
@@ -251,7 +251,7 @@ describe('Token Handler', () => {
                 resource: 'https://api.example.com/resource',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.status).toBe(200);
@@ -264,14 +264,14 @@ describe('Token Handler', () => {
                 'valid_code',
                 undefined, // code_verifier is undefined after PKCE validation
                 undefined, // redirect_uri
-                new URL('https://api.example.com/resource') // resource parameter
+                new URL('https://api.example.com/resource'), // resource parameter
             );
         });
 
         it('returns id token in code exchange if provided', async () => {
             mockProvider.exchangeAuthorizationCode = async (
                 client: OAuthClientInformationFull,
-                authorizationCode: string
+                authorizationCode: string,
             ): Promise<OAuthTokens> => {
                 if (authorizationCode === 'valid_code') {
                     return mockTokensWithIdToken;
@@ -284,7 +284,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.status).toBe(200);
@@ -297,21 +297,21 @@ describe('Token Handler', () => {
             try {
                 global.fetch = vi.fn().mockResolvedValue({
                     ok: true,
-                    json: () => Promise.resolve(mockTokens)
+                    json: () => Promise.resolve(mockTokens),
                 });
 
                 const proxyProvider = new ProxyOAuthServerProvider({
                     endpoints: {
                         authorizationUrl: 'https://example.com/authorize',
-                        tokenUrl: 'https://example.com/token'
+                        tokenUrl: 'https://example.com/token',
                     },
-                    verifyAccessToken: async token => ({
+                    verifyAccessToken: async (token) => ({
                         token,
                         clientId: 'valid-client',
                         scopes: ['read', 'write'],
-                        expiresAt: Date.now() / 1000 + 3600
+                        expiresAt: Date.now() / 1000 + 3600,
                     }),
-                    getClient: async clientId => (clientId === 'valid-client' ? validClient : undefined)
+                    getClient: async (clientId) => (clientId === 'valid-client' ? validClient : undefined),
                 });
 
                 const proxyApp = express();
@@ -324,7 +324,7 @@ describe('Token Handler', () => {
                     grant_type: 'authorization_code',
                     code: 'valid_code',
                     code_verifier: 'any_verifier',
-                    redirect_uri: 'https://example.com/callback'
+                    redirect_uri: 'https://example.com/callback',
                 });
 
                 expect(response.status).toBe(200);
@@ -335,10 +335,10 @@ describe('Token Handler', () => {
                     expect.objectContaining({
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
+                            'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: expect.stringContaining('code_verifier=any_verifier')
-                    })
+                        body: expect.stringContaining('code_verifier=any_verifier'),
+                    }),
                 );
             } finally {
                 global.fetch = originalFetch;
@@ -351,21 +351,21 @@ describe('Token Handler', () => {
             try {
                 global.fetch = vi.fn().mockResolvedValue({
                     ok: true,
-                    json: () => Promise.resolve(mockTokens)
+                    json: () => Promise.resolve(mockTokens),
                 });
 
                 const proxyProvider = new ProxyOAuthServerProvider({
                     endpoints: {
                         authorizationUrl: 'https://example.com/authorize',
-                        tokenUrl: 'https://example.com/token'
+                        tokenUrl: 'https://example.com/token',
                     },
-                    verifyAccessToken: async token => ({
+                    verifyAccessToken: async (token) => ({
                         token,
                         clientId: 'valid-client',
                         scopes: ['read', 'write'],
-                        expiresAt: Date.now() / 1000 + 3600
+                        expiresAt: Date.now() / 1000 + 3600,
                     }),
-                    getClient: async clientId => (clientId === 'valid-client' ? validClient : undefined)
+                    getClient: async (clientId) => (clientId === 'valid-client' ? validClient : undefined),
                 });
 
                 const proxyApp = express();
@@ -379,7 +379,7 @@ describe('Token Handler', () => {
                     grant_type: 'authorization_code',
                     code: 'valid_code',
                     code_verifier: 'any_verifier',
-                    redirect_uri: redirectUri
+                    redirect_uri: redirectUri,
                 });
 
                 expect(response.status).toBe(200);
@@ -390,10 +390,10 @@ describe('Token Handler', () => {
                     expect.objectContaining({
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/x-www-form-urlencoded'
+                            'Content-Type': 'application/x-www-form-urlencoded',
                         },
-                        body: expect.stringContaining(`redirect_uri=${encodeURIComponent(redirectUri)}`)
-                    })
+                        body: expect.stringContaining(`redirect_uri=${encodeURIComponent(redirectUri)}`),
+                    }),
                 );
             } finally {
                 global.fetch = originalFetch;
@@ -406,7 +406,7 @@ describe('Token Handler', () => {
             const response = await supertest(app).post('/token').type('form').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                grant_type: 'refresh_token'
+                grant_type: 'refresh_token',
                 // Missing refresh_token
             });
 
@@ -419,7 +419,7 @@ describe('Token Handler', () => {
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
                 grant_type: 'refresh_token',
-                refresh_token: 'invalid_refresh_token'
+                refresh_token: 'invalid_refresh_token',
             });
 
             expect(response.status).toBe(400);
@@ -433,7 +433,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 resource: 'https://api.example.com/resource',
                 grant_type: 'refresh_token',
-                refresh_token: 'valid_refresh_token'
+                refresh_token: 'valid_refresh_token',
             });
 
             expect(response.status).toBe(200);
@@ -445,7 +445,7 @@ describe('Token Handler', () => {
                 validClient,
                 'valid_refresh_token',
                 undefined, // scopes
-                new URL('https://api.example.com/resource') // resource parameter
+                new URL('https://api.example.com/resource'), // resource parameter
             );
         });
 
@@ -455,7 +455,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'refresh_token',
                 refresh_token: 'valid_refresh_token',
-                scope: 'profile email'
+                scope: 'profile email',
             });
 
             expect(response.status).toBe(200);
@@ -470,7 +470,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             expect(response.header['access-control-allow-origin']).toBe('*');

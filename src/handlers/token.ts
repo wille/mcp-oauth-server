@@ -12,7 +12,7 @@ import {
     UnsupportedGrantTypeError,
     ServerError,
     TooManyRequestsError,
-    OAuthError
+    OAuthError,
 } from '../errors.js';
 
 export type TokenHandlerOptions = {
@@ -25,20 +25,20 @@ export type TokenHandlerOptions = {
 };
 
 const TokenRequestSchema = z.object({
-    grant_type: z.string()
+    grant_type: z.string(),
 });
 
 const AuthorizationCodeGrantSchema = z.object({
     code: z.string(),
     code_verifier: z.string(),
     redirect_uri: z.string().optional(),
-    resource: z.string().url().optional()
+    resource: z.string().url().optional(),
 });
 
 const RefreshTokenGrantSchema = z.object({
     refresh_token: z.string(),
     scope: z.string().optional(),
-    resource: z.string().url().optional()
+    resource: z.string().url().optional(),
 });
 
 export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHandlerOptions): RequestHandler {
@@ -60,8 +60,8 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                 standardHeaders: true,
                 legacyHeaders: false,
                 message: new TooManyRequestsError('You have exceeded the rate limit for token requests').toResponseObject(),
-                ...rateLimitConfig
-            })
+                ...rateLimitConfig,
+            }),
         );
     }
 
@@ -111,7 +111,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                         code,
                         skipLocalPkceValidation ? code_verifier : undefined,
                         redirect_uri,
-                        resource ? new URL(resource) : undefined
+                        resource ? new URL(resource) : undefined,
                     );
                     res.status(200).json(tokens);
                     break;
@@ -130,7 +130,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                         client,
                         refresh_token,
                         scopes,
-                        resource ? new URL(resource) : undefined
+                        resource ? new URL(resource) : undefined,
                     );
                     res.status(200).json(tokens);
                     break;

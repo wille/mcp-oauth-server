@@ -29,12 +29,11 @@ export function createTestClient(overrides?: Partial<OAuthClientInformationFull>
     };
 }
 
-
 /**
  * Attach a listener to an existing server on a random localhost port and return its base URL.
  */
 export async function listenOnRandomPort(server: Server, host: string = '127.0.0.1'): Promise<URL> {
-    return new Promise<URL>(resolve => {
+    return new Promise<URL>((resolve) => {
         server.listen(0, host, () => {
             const addr = server.address() as AddressInfo;
             resolve(new URL(`http://${host}:${addr.port}`));
@@ -89,7 +88,7 @@ export function createExpressResponseMock(options: { trackRedirectUrl?: boolean 
         }),
         header: vi.fn<Response['header']>().mockImplementation((_field: string, _value?: string | string[]) => {
             return res as Response;
-        })
+        }),
     };
 
     if (options.trackRedirectUrl) {
@@ -115,7 +114,7 @@ export function createNodeServerResponseMock(): http.ServerResponse {
         writeHead: vi.fn<http.ServerResponse['writeHead']>().mockReturnThis(),
         write: vi.fn<http.ServerResponse['write']>().mockReturnThis(),
         on: vi.fn<http.ServerResponse['on']>().mockReturnThis(),
-        end: vi.fn<http.ServerResponse['end']>().mockReturnThis()
+        end: vi.fn<http.ServerResponse['end']>().mockReturnThis(),
     };
 
     return res as unknown as http.ServerResponse;

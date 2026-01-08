@@ -13,7 +13,7 @@ describe('Revocation Handler', () => {
     const validClient: OAuthClientInformationFull = {
         client_id: 'valid-client',
         client_secret: 'valid-secret',
-        redirect_uris: ['https://example.com/callback']
+        redirect_uris: ['https://example.com/callback'],
     };
 
     // Mock client store
@@ -23,7 +23,7 @@ describe('Revocation Handler', () => {
                 return validClient;
             }
             return undefined;
-        }
+        },
     };
 
     // Mock provider with revocation capability
@@ -43,7 +43,7 @@ describe('Revocation Handler', () => {
                 access_token: 'mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'mock_refresh_token'
+                refresh_token: 'mock_refresh_token',
             };
         },
 
@@ -52,7 +52,7 @@ describe('Revocation Handler', () => {
                 access_token: 'new_mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token'
+                refresh_token: 'new_mock_refresh_token',
             };
         },
 
@@ -62,7 +62,7 @@ describe('Revocation Handler', () => {
                     token,
                     clientId: 'valid-client',
                     scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 };
             }
             throw new InvalidTokenError('Token is invalid or expired');
@@ -70,7 +70,7 @@ describe('Revocation Handler', () => {
 
         async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
             // Success - do nothing in mock
-        }
+        },
     };
 
     // Mock provider without revocation capability
@@ -90,7 +90,7 @@ describe('Revocation Handler', () => {
                 access_token: 'mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'mock_refresh_token'
+                refresh_token: 'mock_refresh_token',
             };
         },
 
@@ -99,7 +99,7 @@ describe('Revocation Handler', () => {
                 access_token: 'new_mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token'
+                refresh_token: 'new_mock_refresh_token',
             };
         },
 
@@ -109,11 +109,11 @@ describe('Revocation Handler', () => {
                     token,
                     clientId: 'valid-client',
                     scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 };
             }
             throw new InvalidTokenError('Token is invalid or expired');
-        }
+        },
 
         // No revokeToken method
     };
@@ -152,14 +152,14 @@ describe('Revocation Handler', () => {
             const response = await supertest(app).get('/revoke').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
 
             expect(response.status).toBe(405);
             expect(response.headers.allow).toBe('POST');
             expect(response.body).toEqual({
                 error: 'method_not_allowed',
-                error_description: 'The method GET is not allowed for this endpoint'
+                error_description: 'The method GET is not allowed for this endpoint',
             });
             expect(spyRevokeToken).not.toHaveBeenCalled();
         });
@@ -167,7 +167,7 @@ describe('Revocation Handler', () => {
         it('requires token parameter', async () => {
             const response = await supertest(app).post('/revoke').type('form').send({
                 client_id: 'valid-client',
-                client_secret: 'valid-secret'
+                client_secret: 'valid-secret',
                 // Missing token
             });
 
@@ -180,7 +180,7 @@ describe('Revocation Handler', () => {
             const response = await supertest(app).post('/revoke').type('form').send({
                 client_id: 'invalid-client',
                 client_secret: 'wrong-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
 
             expect(response.status).toBe(400);
@@ -192,14 +192,14 @@ describe('Revocation Handler', () => {
             const response = await supertest(app).post('/revoke').type('form').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
 
             expect(response.status).toBe(200);
             expect(response.body).toEqual({}); // Empty response on success
             expect(spyRevokeToken).toHaveBeenCalledTimes(1);
             expect(spyRevokeToken).toHaveBeenCalledWith(validClient, {
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
         });
 
@@ -208,13 +208,13 @@ describe('Revocation Handler', () => {
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
                 token: 'token_to_revoke',
-                token_type_hint: 'refresh_token'
+                token_type_hint: 'refresh_token',
             });
 
             expect(response.status).toBe(200);
             expect(spyRevokeToken).toHaveBeenCalledWith(validClient, {
                 token: 'token_to_revoke',
-                token_type_hint: 'refresh_token'
+                token_type_hint: 'refresh_token',
             });
         });
 
@@ -222,7 +222,7 @@ describe('Revocation Handler', () => {
             const response = await supertest(app).post('/revoke').type('form').set('Origin', 'https://example.com').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
 
             expect(response.header['access-control-allow-origin']).toBe('*');

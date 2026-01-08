@@ -14,7 +14,7 @@ describe('Metadata Handler', () => {
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         token_endpoint_auth_methods_supported: ['client_secret_basic'],
-        code_challenge_methods_supported: ['S256']
+        code_challenge_methods_supported: ['S256'],
     };
 
     let app: express.Express;
@@ -32,7 +32,7 @@ describe('Metadata Handler', () => {
         expect(response.headers.allow).toBe('GET, OPTIONS');
         expect(response.body).toEqual({
             error: 'method_not_allowed',
-            error_description: 'The method POST is not allowed for this endpoint'
+            error_description: 'The method POST is not allowed for this endpoint',
         });
     });
 
@@ -66,7 +66,7 @@ describe('Metadata Handler', () => {
             issuer: 'https://auth.example.com',
             authorization_endpoint: 'https://auth.example.com/authorize',
             token_endpoint: 'https://auth.example.com/token',
-            response_types_supported: ['code']
+            response_types_supported: ['code'],
         };
         minimalApp.use('/.well-known/oauth-authorization-server', metadataHandler(minimalMetadata));
 

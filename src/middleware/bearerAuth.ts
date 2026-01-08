@@ -54,7 +54,7 @@ export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetad
 
             // Check if token has the required scopes (if any)
             if (requiredScopes.length > 0) {
-                const hasAllScopes = requiredScopes.every(scope => authInfo.scopes.includes(scope));
+                const hasAllScopes = requiredScopes.every((scope) => authInfo.scopes.includes(scope));
 
                 if (!hasAllScopes) {
                     throw new InsufficientScopeError('Insufficient scope');

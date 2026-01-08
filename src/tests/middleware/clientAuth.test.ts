@@ -12,13 +12,13 @@ describe('clientAuth middleware', () => {
                 return {
                     client_id: 'valid-client',
                     client_secret: 'valid-secret',
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 };
             } else if (clientId === 'expired-client') {
                 // Client with no secret
                 return {
                     client_id: 'expired-client',
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 };
             } else if (clientId === 'client-with-expired-secret') {
                 // Client with an expired secret
@@ -26,11 +26,11 @@ describe('clientAuth middleware', () => {
                     client_id: 'client-with-expired-secret',
                     client_secret: 'expired-secret',
                     client_secret_expires_at: Math.floor(Date.now() / 1000) - 3600, // Expired 1 hour ago
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 };
             }
             return undefined;
-        }
+        },
     };
 
     // Setup Express app with middleware
@@ -42,7 +42,7 @@ describe('clientAuth middleware', () => {
         app.use(express.json());
 
         options = {
-            clientsStore: mockClientStore
+            clientsStore: mockClientStore,
         };
 
         // Setup route with client auth
@@ -54,7 +54,7 @@ describe('clientAuth middleware', () => {
     it('authenticates valid client credentials', async () => {
         const response = await supertest(app).post('/protected').send({
             client_id: 'valid-client',
-            client_secret: 'valid-secret'
+            client_secret: 'valid-secret',
         });
 
         expect(response.status).toBe(200);
@@ -65,7 +65,7 @@ describe('clientAuth middleware', () => {
     it('rejects invalid client_id', async () => {
         const response = await supertest(app).post('/protected').send({
             client_id: 'non-existent-client',
-            client_secret: 'some-secret'
+            client_secret: 'some-secret',
         });
 
         expect(response.status).toBe(400);
@@ -76,7 +76,7 @@ describe('clientAuth middleware', () => {
     it('rejects invalid client_secret', async () => {
         const response = await supertest(app).post('/protected').send({
             client_id: 'valid-client',
-            client_secret: 'wrong-secret'
+            client_secret: 'wrong-secret',
         });
 
         expect(response.status).toBe(400);
@@ -86,7 +86,7 @@ describe('clientAuth middleware', () => {
 
     it('rejects missing client_id', async () => {
         const response = await supertest(app).post('/protected').send({
-            client_secret: 'valid-secret'
+            client_secret: 'valid-secret',
         });
 
         expect(response.status).toBe(400);
@@ -95,7 +95,7 @@ describe('clientAuth middleware', () => {
 
     it('allows missing client_secret if client has none', async () => {
         const response = await supertest(app).post('/protected').send({
-            client_id: 'expired-client'
+            client_id: 'expired-client',
         });
 
         // Since the client has no secret, this should pass without providing one
@@ -105,7 +105,7 @@ describe('clientAuth middleware', () => {
     it('rejects request when client secret has expired', async () => {
         const response = await supertest(app).post('/protected').send({
             client_id: 'client-with-expired-secret',
-            client_secret: 'expired-secret'
+            client_secret: 'expired-secret',
         });
 
         expect(response.status).toBe(400);
@@ -124,7 +124,7 @@ describe('clientAuth middleware', () => {
         const response = await supertest(app).post('/protected').send({
             client_id: 'valid-client',
             client_secret: 'valid-secret',
-            extra_field: 'should be ignored'
+            extra_field: 'should be ignored',
         });
 
         expect(response.status).toBe(200);

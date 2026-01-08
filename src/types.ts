@@ -1,6 +1,5 @@
-import { AuthorizationParams } from "./provider.js";
+import { AuthorizationParams } from './provider.js';
 
- 
 export interface AuthorizationCode extends Omit<AuthorizationParams, 'resource'> {
     authorizationCode: string;
     clientId: string;
@@ -26,7 +25,6 @@ export interface RefreshToken {
     userId: string;
     resource?: string;
 }
-
 
 /**
  * Information about a validated access token, provided to request handlers.

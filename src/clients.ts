@@ -17,6 +17,6 @@ export interface OAuthRegisteredClientsStore {
      * If unimplemented, dynamic client registration is unsupported.
      */
     registerClient?(
-        client: Omit<OAuthClientInformationFull, 'client_id' | 'client_id_issued_at'>
+        client: Omit<OAuthClientInformationFull, 'client_id' | 'client_id_issued_at'>,
     ): OAuthClientInformationFull | Promise<OAuthClientInformationFull>;
 }

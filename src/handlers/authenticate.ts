@@ -3,13 +3,7 @@ import { z } from 'zod';
 import express from 'express';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
-import {
-    InvalidRequestError,
-    InvalidClientError,
-    ServerError,
-    TooManyRequestsError,
-    OAuthError,
-} from '../errors.js';
+import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
 import { OAuthServer } from '../OAuthServer.js';
 
 export type AuthenticationHandlerOptions = {

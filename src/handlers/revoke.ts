@@ -39,8 +39,8 @@ export function revocationHandler({ provider, rateLimit: rateLimitConfig }: Revo
                 standardHeaders: true,
                 legacyHeaders: false,
                 message: new TooManyRequestsError('You have exceeded the rate limit for token revocation requests').toResponseObject(),
-                ...rateLimitConfig
-            })
+                ...rateLimitConfig,
+            }),
         );
     }
 

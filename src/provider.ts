@@ -42,7 +42,7 @@ export interface OAuthServerProvider {
         authorizationCode: string,
         codeVerifier?: string,
         redirectUri?: string,
-        resource?: URL
+        resource?: URL,
     ): Promise<OAuthTokens>;
 
     /**

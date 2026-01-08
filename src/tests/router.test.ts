@@ -1,7 +1,12 @@
 import { mcpAuthRouter, AuthRouterOptions, mcpAuthMetadataRouter, AuthMetadataOptions } from '../router.js';
 import { OAuthServerProvider, AuthorizationParams } from '../provider.js';
 import { OAuthRegisteredClientsStore } from '../clients.js';
-import { OAuthClientInformationFull, OAuthMetadata, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
+import {
+    OAuthClientInformationFull,
+    OAuthMetadata,
+    OAuthTokenRevocationRequest,
+    OAuthTokens,
+} from '@modelcontextprotocol/sdk/shared/auth.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
 import { AuthInfo } from '../types.js';
@@ -15,7 +20,7 @@ describe('MCP Auth Router', () => {
                 return {
                     client_id: 'valid-client',
                     client_secret: 'valid-secret',
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 };
             }
             return undefined;
@@ -23,7 +28,7 @@ describe('MCP Auth Router', () => {
 
         async registerClient(client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> {
             return client;
-        }
+        },
     };
 
     const mockProvider: OAuthServerProvider = {
@@ -47,7 +52,7 @@ describe('MCP Auth Router', () => {
                 access_token: 'mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'mock_refresh_token'
+                refresh_token: 'mock_refresh_token',
             };
         },
 
@@ -56,7 +61,7 @@ describe('MCP Auth Router', () => {
                 access_token: 'new_mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token'
+                refresh_token: 'new_mock_refresh_token',
             };
         },
 
@@ -66,7 +71,7 @@ describe('MCP Auth Router', () => {
                     token,
                     clientId: 'valid-client',
                     scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 };
             }
             throw new InvalidTokenError('Token is invalid or expired');
@@ -74,7 +79,7 @@ describe('MCP Auth Router', () => {
 
         async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
             // Success - do nothing in mock
-        }
+        },
     };
 
     // Provider without registration and revocation
@@ -85,11 +90,11 @@ describe('MCP Auth Router', () => {
                     return {
                         client_id: 'valid-client',
                         client_secret: 'valid-secret',
-                        redirect_uris: ['https://example.com/callback']
+                        redirect_uris: ['https://example.com/callback'],
                     };
                 }
                 return undefined;
-            }
+            },
         },
 
         async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
@@ -110,7 +115,7 @@ describe('MCP Auth Router', () => {
                 access_token: 'mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'mock_refresh_token'
+                refresh_token: 'mock_refresh_token',
             };
         },
 
@@ -119,7 +124,7 @@ describe('MCP Auth Router', () => {
                 access_token: 'new_mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token'
+                refresh_token: 'new_mock_refresh_token',
             };
         },
 
@@ -129,18 +134,18 @@ describe('MCP Auth Router', () => {
                     token,
                     clientId: 'valid-client',
                     scopes: ['read'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 };
             }
             throw new InvalidTokenError('Token is invalid or expired');
-        }
+        },
     };
 
     describe('Router creation', () => {
         it('throws error for non-HTTPS issuer URL', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('http://auth.example.com')
+                issuerUrl: new URL('http://auth.example.com'),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must be HTTPS');
@@ -149,7 +154,7 @@ describe('MCP Auth Router', () => {
         it('allows localhost HTTP for development', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('http://localhost:3000')
+                issuerUrl: new URL('http://localhost:3000'),
             };
 
             expect(() => mcpAuthRouter(options)).not.toThrow();
@@ -158,7 +163,7 @@ describe('MCP Auth Router', () => {
         it('throws error for issuer URL with fragment', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com#fragment')
+                issuerUrl: new URL('https://auth.example.com#fragment'),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must not have a fragment');
@@ -167,7 +172,7 @@ describe('MCP Auth Router', () => {
         it('throws error for issuer URL with query string', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com?param=value')
+                issuerUrl: new URL('https://auth.example.com?param=value'),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must not have a query string');
@@ -176,7 +181,7 @@ describe('MCP Auth Router', () => {
         it('successfully creates router with valid options', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com')
+                issuerUrl: new URL('https://auth.example.com'),
             };
 
             expect(() => mcpAuthRouter(options)).not.toThrow();
@@ -192,7 +197,7 @@ describe('MCP Auth Router', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
                 issuerUrl: new URL('https://auth.example.com'),
-                serviceDocumentationUrl: new URL('https://docs.example.com')
+                serviceDocumentationUrl: new URL('https://docs.example.com'),
             };
             app.use(mcpAuthRouter(options));
         });
@@ -225,7 +230,7 @@ describe('MCP Auth Router', () => {
             const minimalApp = express();
             const options: AuthRouterOptions = {
                 provider: mockProviderMinimal,
-                issuerUrl: new URL('https://auth.example.com')
+                issuerUrl: new URL('https://auth.example.com'),
             };
             minimalApp.use(mcpAuthRouter(options));
 
@@ -252,7 +257,7 @@ describe('MCP Auth Router', () => {
                 provider: mockProvider,
                 issuerUrl: new URL('https://mcp.example.com'),
                 scopesSupported: ['read', 'write'],
-                resourceName: 'Test API'
+                resourceName: 'Test API',
             };
             draftApp.use(mcpAuthRouter(options));
 
@@ -276,7 +281,7 @@ describe('MCP Auth Router', () => {
             app = express();
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com')
+                issuerUrl: new URL('https://auth.example.com'),
             };
             app.use(mcpAuthRouter(options));
             vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -291,7 +296,7 @@ describe('MCP Auth Router', () => {
                 client_id: 'valid-client',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(302);
@@ -302,7 +307,7 @@ describe('MCP Auth Router', () => {
         it('routes to token endpoint', async () => {
             // Setup verifyChallenge mock for token handler
             vi.mock('pkce-challenge', () => ({
-                verifyChallenge: vi.fn().mockResolvedValue(true)
+                verifyChallenge: vi.fn().mockResolvedValue(true),
             }));
 
             const response = await supertest(app).post('/token').type('form').send({
@@ -310,7 +315,7 @@ describe('MCP Auth Router', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier'
+                code_verifier: 'valid_verifier',
             });
 
             // The request will fail in testing due to mocking limitations,
@@ -322,7 +327,7 @@ describe('MCP Auth Router', () => {
             const response = await supertest(app)
                 .post('/register')
                 .send({
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 });
 
             // The request will fail in testing due to mocking limitations,
@@ -334,7 +339,7 @@ describe('MCP Auth Router', () => {
             const response = await supertest(app).post('/revoke').type('form').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
 
             // The request will fail in testing due to mocking limitations,
@@ -347,7 +352,7 @@ describe('MCP Auth Router', () => {
             const minimalApp = express();
             const options: AuthRouterOptions = {
                 provider: mockProviderMinimal,
-                issuerUrl: new URL('https://auth.example.com')
+                issuerUrl: new URL('https://auth.example.com'),
             };
             minimalApp.use(mcpAuthRouter(options));
 
@@ -355,7 +360,7 @@ describe('MCP Auth Router', () => {
             const regResponse = await supertest(minimalApp)
                 .post('/register')
                 .send({
-                    redirect_uris: ['https://example.com/callback']
+                    redirect_uris: ['https://example.com/callback'],
                 });
             expect(regResponse.status).toBe(404);
 
@@ -363,7 +368,7 @@ describe('MCP Auth Router', () => {
             const revokeResponse = await supertest(minimalApp).post('/revoke').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
-                token: 'token_to_revoke'
+                token: 'token_to_revoke',
             });
             expect(revokeResponse.status).toBe(404);
         });
@@ -378,14 +383,14 @@ describe('MCP Auth Metadata Router', () => {
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
-        token_endpoint_auth_methods_supported: ['client_secret_post']
+        token_endpoint_auth_methods_supported: ['client_secret_post'],
     };
 
     describe('Router creation', () => {
         it('successfully creates router with valid options', () => {
             const options: AuthMetadataOptions = {
                 oauthMetadata: mockOAuthMetadata,
-                resourceServerUrl: new URL('https://api.example.com')
+                resourceServerUrl: new URL('https://api.example.com'),
             };
 
             expect(() => mcpAuthMetadataRouter(options)).not.toThrow();
@@ -402,7 +407,7 @@ describe('MCP Auth Metadata Router', () => {
                 resourceServerUrl: new URL('https://api.example.com'),
                 serviceDocumentationUrl: new URL('https://docs.example.com'),
                 scopesSupported: ['read', 'write'],
-                resourceName: 'Test API'
+                resourceName: 'Test API',
             };
             app.use(mcpAuthMetadataRouter(options));
         });
@@ -439,7 +444,7 @@ describe('MCP Auth Metadata Router', () => {
             const minimalApp = express();
             const options: AuthMetadataOptions = {
                 oauthMetadata: mockOAuthMetadata,
-                resourceServerUrl: new URL('https://api.example.com')
+                resourceServerUrl: new URL('https://api.example.com'),
             };
             minimalApp.use(mcpAuthMetadataRouter(options));
 

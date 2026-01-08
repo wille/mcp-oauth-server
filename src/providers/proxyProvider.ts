@@ -5,7 +5,7 @@ import {
     OAuthClientInformationFullSchema,
     OAuthTokenRevocationRequest,
     OAuthTokens,
-    OAuthTokensSchema
+    OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { AuthInfo } from '../types.js';
 import { AuthorizationParams, OAuthServerProvider } from '../provider.js';
@@ -80,9 +80,9 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
                 const response = await (this._fetch ?? fetch)(revocationUrl, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: params.toString()
+                    body: params.toString(),
                 });
                 await response.body?.cancel();
 
@@ -102,9 +102,9 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
                     const response = await (this._fetch ?? fetch)(registrationUrl, {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify(client)
+                        body: JSON.stringify(client),
                     });
 
                     if (!response.ok) {
@@ -114,8 +114,8 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
 
                     const data = await response.json();
                     return OAuthClientInformationFullSchema.parse(data);
-                }
-            })
+                },
+            }),
         };
     }
 
@@ -127,7 +127,7 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
             response_type: 'code',
             redirect_uri: params.redirectUri,
             code_challenge: params.codeChallenge,
-            code_challenge_method: 'S256'
+            code_challenge_method: 'S256',
         });
 
         // Add optional standard OAuth parameters
@@ -150,12 +150,12 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
         authorizationCode: string,
         codeVerifier?: string,
         redirectUri?: string,
-        resource?: URL
+        resource?: URL,
     ): Promise<OAuthTokens> {
         const params = new URLSearchParams({
             grant_type: 'authorization_code',
             client_id: client.client_id,
-            code: authorizationCode
+            code: authorizationCode,
         });
 
         if (client.client_secret) {
@@ -177,9 +177,9 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
         const response = await (this._fetch ?? fetch)(this._endpoints.tokenUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: params.toString()
+            body: params.toString(),
         });
 
         if (!response.ok) {
@@ -195,12 +195,12 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
         client: OAuthClientInformationFull,
         refreshToken: string,
         scopes?: string[],
-        resource?: URL
+        resource?: URL,
     ): Promise<OAuthTokens> {
         const params = new URLSearchParams({
             grant_type: 'refresh_token',
             client_id: client.client_id,
-            refresh_token: refreshToken
+            refresh_token: refreshToken,
         });
 
         if (client.client_secret) {
@@ -218,9 +218,9 @@ export class ProxyOAuthServerProvider implements OAuthServerProvider {
         const response = await (this._fetch ?? fetch)(this._endpoints.tokenUrl, {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded'
+                'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: params.toString()
+            body: params.toString(),
         });
 
         if (!response.ok) {

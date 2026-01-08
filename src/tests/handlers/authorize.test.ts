@@ -13,14 +13,14 @@ describe('Authorization Handler', () => {
         client_id: 'valid-client',
         client_secret: 'valid-secret',
         redirect_uris: ['https://example.com/callback'],
-        scope: 'profile email'
+        scope: 'profile email',
     };
 
     const multiRedirectClient: OAuthClientInformationFull = {
         client_id: 'multi-redirect-client',
         client_secret: 'valid-secret',
         redirect_uris: ['https://example.com/callback1', 'https://example.com/callback2'],
-        scope: 'profile email'
+        scope: 'profile email',
     };
 
     // Mock client store
@@ -32,7 +32,7 @@ describe('Authorization Handler', () => {
                 return multiRedirectClient;
             }
             return undefined;
-        }
+        },
     };
 
     // Mock provider
@@ -58,7 +58,7 @@ describe('Authorization Handler', () => {
                 access_token: 'mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'mock_refresh_token'
+                refresh_token: 'mock_refresh_token',
             };
         },
 
@@ -67,7 +67,7 @@ describe('Authorization Handler', () => {
                 access_token: 'new_mock_access_token',
                 token_type: 'bearer',
                 expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token'
+                refresh_token: 'new_mock_refresh_token',
             };
         },
 
@@ -77,7 +77,7 @@ describe('Authorization Handler', () => {
                     token,
                     clientId: 'valid-client',
                     scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 };
             }
             throw new InvalidTokenError('Token is invalid or expired');
@@ -85,7 +85,7 @@ describe('Authorization Handler', () => {
 
         async revokeToken(): Promise<void> {
             // Do nothing in mock
-        }
+        },
     };
 
     // Setup express app with handler
@@ -128,7 +128,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(302);
@@ -141,7 +141,7 @@ describe('Authorization Handler', () => {
                 client_id: 'multi-redirect-client',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(400);
@@ -153,7 +153,7 @@ describe('Authorization Handler', () => {
                 redirect_uri: 'https://malicious.com/callback',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(400);
@@ -165,7 +165,7 @@ describe('Authorization Handler', () => {
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(302);
@@ -181,7 +181,7 @@ describe('Authorization Handler', () => {
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'token', // invalid - we only support code flow
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(302);
@@ -194,7 +194,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
                 // Missing code_challenge
             });
 
@@ -209,7 +209,7 @@ describe('Authorization Handler', () => {
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'plain' // Only S256 is supported
+                code_challenge_method: 'plain', // Only S256 is supported
             });
 
             expect(response.status).toBe(302);
@@ -228,7 +228,7 @@ describe('Authorization Handler', () => {
                 response_type: 'code',
                 code_challenge: 'challenge123',
                 code_challenge_method: 'S256',
-                resource: 'https://api.example.com/resource'
+                resource: 'https://api.example.com/resource',
             });
 
             expect(response.status).toBe(302);
@@ -237,9 +237,9 @@ describe('Authorization Handler', () => {
                 expect.objectContaining({
                     resource: new URL('https://api.example.com/resource'),
                     redirectUri: 'https://example.com/callback',
-                    codeChallenge: 'challenge123'
+                    codeChallenge: 'challenge123',
                 }),
-                expect.any(Object)
+                expect.any(Object),
             );
         });
     });
@@ -253,7 +253,7 @@ describe('Authorization Handler', () => {
                 code_challenge: 'challenge123',
                 code_challenge_method: 'S256',
                 scope: 'profile email',
-                state: 'xyz789'
+                state: 'xyz789',
             });
 
             expect(response.status).toBe(302);
@@ -270,7 +270,7 @@ describe('Authorization Handler', () => {
                 response_type: 'code',
                 code_challenge: 'challenge123',
                 code_challenge_method: 'S256',
-                state: 'state-value-123'
+                state: 'state-value-123',
             });
 
             expect(response.status).toBe(302);
@@ -283,7 +283,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 response_type: 'code',
                 code_challenge: 'challenge123',
-                code_challenge_method: 'S256'
+                code_challenge_method: 'S256',
             });
 
             expect(response.status).toBe(302);

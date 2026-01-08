@@ -21,7 +21,7 @@ const ClientAuthorizationParamsSchema = z.object({
     redirect_uri: z
         .string()
         .optional()
-        .refine(value => value === undefined || URL.canParse(value), { message: 'redirect_uri must be a valid URL' })
+        .refine((value) => value === undefined || URL.canParse(value), { message: 'redirect_uri must be a valid URL' }),
 });
 
 // Parameters that must be validated for a successful authorization request. Failure can be reported to the redirect URI.
@@ -31,7 +31,7 @@ const RequestAuthorizationParamsSchema = z.object({
     code_challenge_method: z.literal('S256'),
     scope: z.string().optional(),
     state: z.string().optional(),
-    resource: z.string().url().optional()
+    resource: z.string().url().optional(),
 });
 
 export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: AuthorizationHandlerOptions): RequestHandler {
@@ -49,8 +49,8 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
                 standardHeaders: true,
                 legacyHeaders: false,
                 message: new TooManyRequestsError('You have exceeded the rate limit for authorization requests').toResponseObject(),
-                ...rateLimitConfig
-            })
+                ...rateLimitConfig,
+            }),
         );
     }
 
@@ -130,9 +130,9 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
                     scopes: requestedScopes,
                     redirectUri: redirect_uri,
                     codeChallenge: code_challenge,
-                    resource: resource ? new URL(resource) : undefined
+                    resource: resource ? new URL(resource) : undefined,
                 },
-                res
+                res,
             );
         } catch (error) {
             // Post-redirect errors - redirect with error parameters

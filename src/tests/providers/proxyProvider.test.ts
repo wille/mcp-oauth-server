@@ -12,12 +12,12 @@ describe('Proxy OAuth Server Provider', () => {
     const validClient: OAuthClientInformationFull = {
         client_id: 'test-client',
         client_secret: 'test-secret',
-        redirect_uris: ['https://example.com/callback']
+        redirect_uris: ['https://example.com/callback'],
     };
 
     // Mock response object
     const mockResponse = {
-        redirect: vi.fn()
+        redirect: vi.fn(),
     } as unknown as Response;
 
     // Mock provider functions
@@ -30,10 +30,10 @@ describe('Proxy OAuth Server Provider', () => {
             authorizationUrl: 'https://auth.example.com/authorize',
             tokenUrl: 'https://auth.example.com/token',
             revocationUrl: 'https://auth.example.com/revoke',
-            registrationUrl: 'https://auth.example.com/register'
+            registrationUrl: 'https://auth.example.com/register',
         },
         verifyAccessToken: mockVerifyToken,
-        getClient: mockGetClient
+        getClient: mockGetClient,
     };
 
     let provider: ProxyOAuthServerProvider;
@@ -51,7 +51,7 @@ describe('Proxy OAuth Server Provider', () => {
                     token,
                     clientId: 'test-client',
                     scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600
+                    expiresAt: Date.now() / 1000 + 3600,
                 } as AuthInfo;
             }
             throw new InvalidTokenError('Invalid token');
@@ -70,8 +70,8 @@ describe('Proxy OAuth Server Provider', () => {
         (global.fetch as Mock).mockImplementation(() =>
             Promise.resolve({
                 ok: false,
-                status: 400
-            })
+                status: 400,
+            }),
         );
     };
 
@@ -89,9 +89,9 @@ describe('Proxy OAuth Server Provider', () => {
                     codeChallenge: 'test-challenge',
                     state: 'test-state',
                     scopes: ['read', 'write'],
-                    resource: new URL('https://api.example.com/resource')
+                    resource: new URL('https://api.example.com/resource'),
                 },
-                mockResponse
+                mockResponse,
             );
 
             const expectedUrl = new URL('https://auth.example.com/authorize');
@@ -113,15 +113,15 @@ describe('Proxy OAuth Server Provider', () => {
             access_token: 'new-access-token',
             token_type: 'Bearer',
             expires_in: 3600,
-            refresh_token: 'new-refresh-token'
+            refresh_token: 'new-refresh-token',
         };
 
         beforeEach(() => {
             (global.fetch as Mock).mockImplementation(() =>
                 Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve(mockTokenResponse)
-                })
+                    json: () => Promise.resolve(mockTokenResponse),
+                }),
             );
         });
 
@@ -133,10 +133,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining('grant_type=authorization_code')
-                })
+                    body: expect.stringContaining('grant_type=authorization_code'),
+                }),
             );
             expect(tokens).toEqual(mockTokenResponse);
         });
@@ -150,10 +150,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining(`redirect_uri=${encodeURIComponent(redirectUri)}`)
-                })
+                    body: expect.stringContaining(`redirect_uri=${encodeURIComponent(redirectUri)}`),
+                }),
             );
             expect(tokens).toEqual(mockTokenResponse);
         });
@@ -164,7 +164,7 @@ describe('Proxy OAuth Server Provider', () => {
                 'test-code',
                 'test-verifier',
                 'https://example.com/callback',
-                new URL('https://api.example.com/resource')
+                new URL('https://api.example.com/resource'),
             );
 
             expect(global.fetch).toHaveBeenCalledWith(
@@ -172,10 +172,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining('resource=' + encodeURIComponent('https://api.example.com/resource'))
-                })
+                    body: expect.stringContaining('resource=' + encodeURIComponent('https://api.example.com/resource')),
+                }),
             );
             expect(tokens).toEqual(mockTokenResponse);
         });
@@ -197,10 +197,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining('grant_type=refresh_token')
-                })
+                    body: expect.stringContaining('grant_type=refresh_token'),
+                }),
             );
             expect(tokens).toEqual(mockTokenResponse);
         });
@@ -210,7 +210,7 @@ describe('Proxy OAuth Server Provider', () => {
                 validClient,
                 'test-refresh-token',
                 ['read', 'write'],
-                new URL('https://api.example.com/resource')
+                new URL('https://api.example.com/resource'),
             );
 
             expect(global.fetch).toHaveBeenCalledWith(
@@ -218,10 +218,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining('resource=' + encodeURIComponent('https://api.example.com/resource'))
-                })
+                    body: expect.stringContaining('resource=' + encodeURIComponent('https://api.example.com/resource')),
+                }),
             );
             expect(tokens).toEqual(mockTokenResponse);
         });
@@ -231,14 +231,14 @@ describe('Proxy OAuth Server Provider', () => {
         it('registers new client', async () => {
             const newClient: OAuthClientInformationFull = {
                 client_id: 'new-client',
-                redirect_uris: ['https://new-client.com/callback']
+                redirect_uris: ['https://new-client.com/callback'],
             };
 
             (global.fetch as Mock).mockImplementation(() =>
                 Promise.resolve({
                     ok: true,
-                    json: () => Promise.resolve(newClient)
-                })
+                    json: () => Promise.resolve(newClient),
+                }),
             );
 
             const result = await provider.clientsStore.registerClient!(newClient);
@@ -248,10 +248,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(newClient)
-                })
+                    body: JSON.stringify(newClient),
+                }),
             );
             expect(result).toEqual(newClient);
         });
@@ -260,7 +260,7 @@ describe('Proxy OAuth Server Provider', () => {
             mockFailedResponse();
             const newClient: OAuthClientInformationFull = {
                 client_id: 'new-client',
-                redirect_uris: ['https://new-client.com/callback']
+                redirect_uris: ['https://new-client.com/callback'],
             };
 
             await expect(provider.clientsStore.registerClient!(newClient)).rejects.toThrow(ServerError);
@@ -271,13 +271,13 @@ describe('Proxy OAuth Server Provider', () => {
         it('revokes token', async () => {
             (global.fetch as Mock).mockImplementation(() =>
                 Promise.resolve({
-                    ok: true
-                })
+                    ok: true,
+                }),
             );
 
             await provider.revokeToken!(validClient, {
                 token: 'token-to-revoke',
-                token_type_hint: 'access_token'
+                token_type_hint: 'access_token',
             });
 
             expect(global.fetch).toHaveBeenCalledWith(
@@ -285,10 +285,10 @@ describe('Proxy OAuth Server Provider', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
+                        'Content-Type': 'application/x-www-form-urlencoded',
                     },
-                    body: expect.stringContaining('token=token-to-revoke')
-                })
+                    body: expect.stringContaining('token=token-to-revoke'),
+                }),
             );
         });
 
@@ -296,8 +296,8 @@ describe('Proxy OAuth Server Provider', () => {
             mockFailedResponse();
             await expect(
                 provider.revokeToken!(validClient, {
-                    token: 'invalid-token'
-                })
+                    token: 'invalid-token',
+                }),
             ).rejects.toThrow(ServerError);
         });
     });
@@ -308,7 +308,7 @@ describe('Proxy OAuth Server Provider', () => {
                 token: 'valid-token',
                 clientId: 'test-client',
                 scopes: ['read', 'write'],
-                expiresAt: Date.now() / 1000 + 3600
+                expiresAt: Date.now() / 1000 + 3600,
             };
             mockVerifyToken.mockResolvedValue(validAuthInfo);
 

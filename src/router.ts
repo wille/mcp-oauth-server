@@ -108,7 +108,7 @@ export const createOAuthMetadata = (options: {
         revocation_endpoint: revocation_endpoint ? new URL(revocation_endpoint, baseUrl || issuer).href : undefined,
         revocation_endpoint_auth_methods_supported: revocation_endpoint ? ['client_secret_post'] : undefined,
 
-        registration_endpoint: registration_endpoint ? new URL(registration_endpoint, baseUrl || issuer).href : undefined
+        registration_endpoint: registration_endpoint ? new URL(registration_endpoint, baseUrl || issuer).href : undefined,
     };
 
     return metadata;
@@ -133,7 +133,7 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
 
     router.use(
         new URL(oauthMetadata.authorization_endpoint).pathname,
-        authorizationHandler({ provider: options.provider, ...options.authorizationOptions })
+        authorizationHandler({ provider: options.provider, ...options.authorizationOptions }),
     );
 
     router.use(new URL(oauthMetadata.token_endpoint).pathname, tokenHandler({ provider: options.provider, ...options.tokenOptions }));
@@ -145,8 +145,8 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
             resourceServerUrl: options.resourceServerUrl ?? options.baseUrl ?? new URL(oauthMetadata.issuer),
             serviceDocumentationUrl: options.serviceDocumentationUrl,
             scopesSupported: options.scopesSupported,
-            resourceName: options.resourceName
-        })
+            resourceName: options.resourceName,
+        }),
     );
 
     if (oauthMetadata.registration_endpoint) {
@@ -154,15 +154,15 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
             new URL(oauthMetadata.registration_endpoint).pathname,
             clientRegistrationHandler({
                 clientsStore: options.provider.clientsStore,
-                ...options.clientRegistrationOptions
-            })
+                ...options.clientRegistrationOptions,
+            }),
         );
     }
 
     if (oauthMetadata.revocation_endpoint) {
         router.use(
             new URL(oauthMetadata.revocation_endpoint).pathname,
-            revocationHandler({ provider: options.provider, ...options.revocationOptions })
+            revocationHandler({ provider: options.provider, ...options.revocationOptions }),
         );
     }
 
@@ -209,7 +209,7 @@ export function mcpAuthMetadataRouter(options: AuthMetadataOptions): express.Rou
 
         scopes_supported: options.scopesSupported,
         resource_name: options.resourceName,
-        resource_documentation: options.serviceDocumentationUrl?.href
+        resource_documentation: options.serviceDocumentationUrl?.href,
     };
 
     // Serve PRM at the path-specific URL per RFC 9728
