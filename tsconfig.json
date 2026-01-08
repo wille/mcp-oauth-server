@@ -4,10 +4,14 @@
         "useDefineForClassFields": true,
         "isolatedModules": true,
         "lib": ["ESNext", "dom", "WebWorker"],
+        "types": [
+            "vitest/globals",
+        ],
         "declaration": true,
         "declarationDir": "./dist",
-        "module": "ES2020",
-        "moduleResolution": "Node",
+        "target": "es2020",
+        "module": "es2022",
+        "moduleResolution": "bundler",
         "noImplicitReturns": true,
         "noImplicitThis": true,
         "pretty": true,
@@ -16,9 +20,12 @@
         "strictNullChecks": true,
         "baseUrl": "src",
         "importHelpers": true,
-        "target": "ES2020",
-        "noEmit": true
+        "noEmit": true,
         // "allowImportingTsExtensions": true
+        "paths": {
+            "@modelcontextprotocol/core": ["./node_modules/@modelcontextprotocol/core/src/index.ts"],
+        }
     },
-    "include": ["src"]
+    "include": ["src"],
+
 }

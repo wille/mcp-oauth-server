@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
-import { UnsupportedGrantTypeError, UnsupportedResponseTypeError, CustomOAuthError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 
 describe('OAuthServer Client Registration', () => {
     let oauthServer: OAuthServer;

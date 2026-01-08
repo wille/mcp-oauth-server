@@ -1,9 +1,9 @@
-import { AuthorizationParams, OAuthServerProvider } from '@modelcontextprotocol/sdk/server/auth/provider.js';
-import { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients.js';
+import { AuthorizationParams, OAuthServerProvider } from './provider.js';
+import { OAuthRegisteredClientsStore } from './clients.js';
 import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { Response } from 'express';
-import { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
-import { mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import { AuthInfo } from './types.js';
+import { mcpAuthRouter } from './router.js';
 import { checkResourceAllowed, resourceUrlFromServerUrl } from '@modelcontextprotocol/sdk/shared/auth-utils.js';
 import {
     CustomOAuthError,
@@ -14,7 +14,7 @@ import {
     UnsupportedGrantTypeError,
     UnsupportedResponseTypeError,
     InvalidTargetError,
-} from '@modelcontextprotocol/sdk/server/auth/errors.js';
+} from './errors.js';
 import crypto from 'node:crypto';
 import debug from 'debug';
 import { AccessToken, RefreshToken } from './types';

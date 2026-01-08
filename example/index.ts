@@ -1,6 +1,6 @@
-import { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from '@modelcontextprotocol/sdk/server/auth/router.js';
+import { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from '../src/router.js';
 import express from 'express';
-import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
+import { requireBearerAuth } from '../src/middleware/bearerAuth.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { OAuthServer } from '../src/OAuthServer.js';
@@ -28,7 +28,7 @@ const mcpOAuthProvider = new OAuthServer({
 
 const mcpAuthMiddleware = mcpAuthRouter({
     provider: mcpOAuthProvider,
-    issuerUrl: new URL('http://localhost:3000/'),
+    issuerUrl: new URL('http://localhost:4444/'),
     resourceServerUrl: mcpServerUrl,
     scopesSupported: ['mcp:tools'],
 
@@ -139,7 +139,7 @@ function main() {
         await transport.handleRequest(req, res, req.body);
     });
 
-    app.listen(3000, () => {
+    app.listen(4444, () => {
         console.log('Server is running on port 3000');
     });
 }

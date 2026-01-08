@@ -7,7 +7,7 @@ import {
     InvalidGrantError,
     InvalidScopeError,
     InvalidTargetError,
-} from '@modelcontextprotocol/sdk/server/auth/errors.js';
+} from '../errors.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { AuthorizationCode } from '../types.js';
 import { generatePKCEPair, createTestClient } from './test-helpers.js';

@@ -1,4 +1,4 @@
-import { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth';
+import { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import debug from 'debug';
 import { OAuthServerModel } from './OAuthServerModel';
 import { AccessToken, RefreshToken, AuthorizationCode } from './types';

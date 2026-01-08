@@ -1,4 +1,4 @@
-import { InvalidGrantError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InvalidGrantError } from './errors.js';
 import crypto from 'node:crypto';
 
 export function validateChallenge(codeChallenge: string, codeVerifier: string) {

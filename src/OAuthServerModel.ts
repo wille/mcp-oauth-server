@@ -1,6 +1,6 @@
-import { OAuthRegisteredClientsStore } from '@modelcontextprotocol/sdk/server/auth/clients';
-import { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth';
-import { AuthorizationCode, AccessToken, RefreshToken } from './types';
+import { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthRegisteredClientsStore } from './clients.js';
+import { AuthorizationCode, AccessToken, RefreshToken } from './types.js';
 
 export interface OAuthServerModel extends OAuthRegisteredClientsStore {
     saveAuthorizationCode(code: AuthorizationCode, client: OAuthClientInformationFull): Promise<void>;

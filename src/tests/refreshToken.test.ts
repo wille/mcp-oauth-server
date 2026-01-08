@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
-import { InvalidScopeError, InvalidTargetError } from '@modelcontextprotocol/sdk/server/auth/errors.js';
+import { InvalidScopeError, InvalidTargetError } from '../errors.js';
 import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { RefreshToken } from '../types.js';
 import { createTestClient } from './test-helpers.js';
