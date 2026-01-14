@@ -31,7 +31,6 @@ describe('allowedMethods', () => {
         const methods = ['post', 'put', 'delete', 'patch'];
 
         for (const method of methods) {
-            // @ts-expect-error - dynamic method call
             const response = await request(app)[method]('/test');
             expect(response.status).toBe(405);
             expect(response.body).toEqual({

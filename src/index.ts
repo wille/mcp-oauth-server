@@ -12,6 +12,6 @@ export { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-util
 // and so we can access it after requireBearerAuth
 declare module './types.js' {
     interface AuthInfo {
-        userId: string;
+        userId?: string;
     }
 }
