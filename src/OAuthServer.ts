@@ -14,6 +14,7 @@ import {
     UnsupportedGrantTypeError,
     UnsupportedResponseTypeError,
     InvalidTargetError,
+    ServerError,
 } from './errors.js';
 import crypto from 'node:crypto';
 import debug from 'debug';
@@ -76,6 +77,13 @@ export interface OAuthServerOptions {
     accessTokenLifetime?: number;
 
     /**
+     * Whether to validate the resource indicator in the authorization request.
+     *
+     * @default true
+     */
+    strictResource?: boolean;
+
+    /**
      * The number of seconds after which to expire issued client secrets, or 0 to prevent expiration of client secrets (not recommended).
      *
      * Public clients (clients registered with token_endpoint_auth_method = 'none') do not have a client secret and lives forever.
@@ -103,7 +111,7 @@ export interface OAuthServerOptions {
      *
      * If set, the RFC 8707 resource indicator will be validated against this URL.
      */
-    mcpServerUrl?: URL;
+    resourceServerUrl?: URL;
 
     /**
      * Modify the authorization redirect URL.
@@ -135,7 +143,8 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
     refreshTokenLifetime: number;
     clientSecretLifetime: number;
     authorizationCodeLifetime: number;
-    mcpServerUrl?: URL;
+    strictResource: boolean;
+    resourceServerUrl?: URL;
     modifyAuthorizationRedirectUrl?: OAuthServerOptions['modifyAuthorizationRedirectUrl'];
     errorHandler: ErrorHandler;
 
@@ -147,7 +156,8 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         this.refreshTokenLifetime = options.refreshTokenLifetime || 3600 * 24 * 14;
         this.clientSecretLifetime = options.clientSecretLifetime || 3 * 30 * 24 * 60 * 60;
         this.authorizationCodeLifetime = options.authorizationCodeLifetime || 5 * 60;
-        this.mcpServerUrl = options.mcpServerUrl ? resourceUrlFromServerUrl(options.mcpServerUrl) : undefined;
+        this.strictResource = options.strictResource ?? true;
+        this.resourceServerUrl = options.resourceServerUrl ? resourceUrlFromServerUrl(options.resourceServerUrl) : undefined;
         this.modifyAuthorizationRedirectUrl = options.modifyAuthorizationRedirectUrl;
         this.errorHandler = options.errorHandler || defaultErrorHandler;
     }
@@ -321,14 +331,25 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
             }
 
             // The resource indicator in the token request must match the resource indicator in the authorization request.
-            if (codeData.resource) {
+            if (this.strictResource) {
+                // ChatGPT doesn't send the resource indicator in authorization_code requests and thus breaks
+                // https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#resource-parameter-implementation
                 if (!resource) {
                     throw new InvalidTargetError('Resource indicator is required');
                 }
 
-                if (!checkResourceAllowed({ requestedResource: resource, configuredResource: codeData.resource })) {
-                    throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${codeData.resource}`);
+                if (!codeData.resource) {
+                    throw new ServerError('authorization code was issued without a resource indicator');
                 }
+            }
+
+            // If a resource is provided, it must be valid
+            if (
+                codeData.resource &&
+                resource &&
+                !checkResourceAllowed({ requestedResource: resource, configuredResource: codeData.resource })
+            ) {
+                throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${codeData.resource}`);
             }
 
             validateChallenge(codeData.codeChallenge, codeVerifier);
@@ -552,21 +573,24 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
     }
 
     /**
-     * Validates the resource indicator against the configured mcpServerUrl.
+     * Validates the resource indicator against the configured resourceServerUrl.
      *
      * If strictResource is not set, we do not validate the resource indicator and it's up to the user
      * to validate the resource indicator themselves, if desired.
      */
     private validateResource(resource?: string | URL): void {
-        if (!resource) {
-            // throw new InvalidTargetError('Invalid resource: resource is required');
-            return; // support clients not sending a resource indicator at all
+        // Do not accept missing resource indicators if strictResource is set
+        if (this.strictResource && !resource) {
+            throw new InvalidTargetError('Invalid resource: resource is required');
         }
-        if (!this.mcpServerUrl) {
-            return;
-        }
-        if (!checkResourceAllowed({ requestedResource: resource, configuredResource: this.mcpServerUrl })) {
-            throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${this.mcpServerUrl}`);
+
+        // Validate the resource indicator if it is provided and the resourceServerUrl is configured
+        if (
+            resource &&
+            this.resourceServerUrl &&
+            !checkResourceAllowed({ requestedResource: resource, configuredResource: this.resourceServerUrl })
+        ) {
+            throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${this.resourceServerUrl}`);
         }
     }
 }

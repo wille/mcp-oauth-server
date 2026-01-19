@@ -70,7 +70,6 @@ import { OAuthServer } from 'mcp-oauth-server';
 
 const oauthServer = new OAuthServer({
     authorizationUrl: new URL('http://localhost:3000/consent'),
-    strictResourceUrl: new URL('http://localhost:3000/mcp'),
     scopesSupported: ['mcp:tools'],
 })
 ```
@@ -79,12 +78,13 @@ const oauthServer = new OAuthServer({
 
 - `model`: (optional) The storage model to use for the OAuth server. Default: `MemoryOAuthServerModel` (in-memory, suitable for development). For production, implement your own `OAuthServerModel` to use a database.
 - `authorizationUrl`: (required) The URL to redirect the user to for authorization. This may be a consent screen hosted on the Authorization Server or a custom consent screen hosted on another frontend, like your web application.
+- `resourceServerUrl`: (optional) The URL of the MCP Server (Resource Server). If not provided, resource indicators will not be validated.
 - `scopesSupported`: (optional) Array of scopes supported by this OAuth server. If the client does not include any scopes in the request, the server will default to all the supported scopes. Some MCP clients do not follow the spec and do not include any scopes in the request.
 - `accessTokenLifetime`: (optional) The lifetime of the access token in seconds. Default: `3600` (1 hour)
 - `refreshTokenLifetime`: (optional) The lifetime of the refresh token in seconds. Default: `1209600` (2 weeks)
 - `clientSecretLifetime`: (optional) The number of seconds after which to expire issued client secrets, or `0` to prevent expiration of client secrets (not recommended). Default: `7776000` (3 months). Public clients (clients registered with `token_endpoint_auth_method = 'none'`) do not have a client secret and live forever.
 - `authorizationCodeLifetime`: (optional) The lifetime of the authorization code in seconds. Default: `300` (5 minutes)
-- `strictResourceUrl`: (optional) The resource indicator (RFC 8707) that must be used for all requests. This should be set to your MCP server URL. Leaving this unset will allow better compatibility with MCP clients that do not follow the spec and do not include a resource indicator in the request.
+- `strictResource`: (optional) Whether to validate the resource indicator in the authorization request. Default: `true`. Setting this to `false` will allow better compatibility with MCP clients that do not follow the spec and do not include a resource indicator in the request.
 - `modifyAuthorizationRedirectUrl`: (optional) A function to modify the authorization redirect URL. This can be used to add metadata to the authorization redirect URL, like the client name, client URI, or logo URI, which can then be displayed on your consent screen.
 - `errorHandler`: (optional) A function to handle errors. This can be used to log errors occuring in the OAuth flow.
 
@@ -145,11 +145,14 @@ import { mcpAuthRouter } from 'mcp-oauth-server';
 const app = express();
 app.use(mcpAuthRouter({
     provider: oauthServer,
-    issuerUrl: new URL('http://localhost:3000/'),
-    resourceServerUrl: mcpServerUrl,
+    issuerUrl: new URL('http://localhost:3000'),
+    baseUrl: new URL('http://localhost:3000/oauth'),
+    resourceServerUrl: new URL('http://localhost:3000/mcp'),
     scopesSupported: ['mcp:tools'],
 }));
 ```
+
+The router needs to be mounted at the root of your API. Control the base path of the OAuth server endpoints using the `baseUrl` option. 
 
 See [router.ts](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/server/auth/router.ts) for the full options.
 

@@ -23,6 +23,7 @@ describe('OAuthServer Authorization Code Flow', () => {
             accessTokenLifetime: 3600,
             refreshTokenLifetime: 1209600,
             authorizationCodeLifetime: 300, // 5 minutes
+            strictResource: false,
         });
 
         client = createTestClient();
@@ -123,6 +124,7 @@ describe('OAuthServer Authorization Code Flow', () => {
                 authorizationUrl: new URL('http://localhost:3000/consent'),
                 scopesSupported: ['mcp:tools'],
                 modifyAuthorizationRedirectUrl: modifyUrl,
+                strictResource: false,
             });
 
             const params = {
@@ -141,7 +143,7 @@ describe('OAuthServer Authorization Code Flow', () => {
                 model,
                 authorizationUrl: new URL('http://localhost:3000/consent'),
                 scopesSupported: ['mcp:tools'],
-                mcpServerUrl: new URL('http://localhost:3000/mcp'),
+                resourceServerUrl: new URL('http://localhost:3000/mcp'),
             });
 
             const params = {
@@ -151,6 +153,102 @@ describe('OAuthServer Authorization Code Flow', () => {
             };
 
             await expect(resourceServer.authorize(client, params, mockResponse)).rejects.toThrow(InvalidTargetError);
+        });
+
+        describe('resource indicator with strictResource', () => {
+            it('should not throw when resource is missing and strictResource is false', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: false,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                };
+
+                await resourceServer.authorize(client, params, mockResponse);
+
+                expect(mockRedirect).toHaveBeenCalledTimes(1);
+            });
+
+            it('should throw when resource does not match and strictResource is false', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: false,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/different'),
+                };
+
+                await expect(resourceServer.authorize(client, params, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should throw when resource is missing and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                };
+
+                await expect(resourceServer.authorize(client, params, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should throw when resource does not match and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/different'),
+                };
+
+                await expect(resourceServer.authorize(client, params, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should succeed when resource matches and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/mcp'),
+                };
+
+                await resourceServer.authorize(client, params, mockResponse);
+
+                expect(mockRedirect).toHaveBeenCalledTimes(1);
+                const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+                expect(redirectUrl.searchParams.get('resource')).toBe('http://localhost:3000/mcp');
+            });
         });
     });
 
@@ -244,6 +342,136 @@ describe('OAuthServer Authorization Code Flow', () => {
             const code = redirectUrl.searchParams.get('code')!;
             const savedCode = await model.getAuthorizationCode(code);
             expect(savedCode?.scopes).toEqual(['mcp:tools', 'mcp:resources']);
+        });
+
+        describe('resource indicator with strictResource', () => {
+            it('should not throw when resource is missing and strictResource is false', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: false,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                };
+                const userId = 'user-123';
+
+                await resourceServer.authenticate(client, params, userId, mockResponse);
+
+                expect(mockRedirect).toHaveBeenCalledTimes(1);
+                const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+                expect(redirectUrl.searchParams.has('code')).toBe(true);
+            });
+
+            it('should throw when resource does not match and strictResource is false', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: false,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/different'),
+                };
+                const userId = 'user-123';
+
+                await expect(resourceServer.authenticate(client, params, userId, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should throw when resource is missing and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                };
+                const userId = 'user-123';
+
+                await expect(resourceServer.authenticate(client, params, userId, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should throw when resource does not match and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/different'),
+                };
+                const userId = 'user-123';
+
+                await expect(resourceServer.authenticate(client, params, userId, mockResponse)).rejects.toThrow(InvalidTargetError);
+            });
+
+            it('should succeed when resource matches and strictResource is true', async () => {
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                    strictResource: true,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: new URL('http://localhost:3000/mcp'),
+                };
+                const userId = 'user-123';
+
+                await resourceServer.authenticate(client, params, userId, mockResponse);
+
+                expect(mockRedirect).toHaveBeenCalledTimes(1);
+                const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+                const code = redirectUrl.searchParams.get('code')!;
+                const savedCode = await model.getAuthorizationCode(code);
+                expect(savedCode?.resource).toBe('http://localhost:3000/mcp');
+            });
+
+            it('should store resource in authorization code when provided', async () => {
+                const resourceUrl = new URL('http://localhost:3000/mcp');
+                const resourceServer = new OAuthServer({
+                    model,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    resourceServerUrl: resourceUrl,
+                    strictResource: false,
+                });
+
+                const params = {
+                    redirectUri: 'http://localhost:3000/callback',
+                    codeChallenge: 'test-challenge',
+                    resource: resourceUrl,
+                };
+                const userId = 'user-123';
+
+                await resourceServer.authenticate(client, params, userId, mockResponse);
+
+                const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+                const code = redirectUrl.searchParams.get('code')!;
+                const savedCode = await model.getAuthorizationCode(code);
+                expect(savedCode?.resource).toBe(resourceUrl.href);
+            });
         });
     });
 
@@ -437,6 +665,90 @@ describe('OAuthServer Authorization Code Flow', () => {
             const differentResource = new URL('http://localhost:3000/different');
             await expect(
                 oauthServer.exchangeAuthorizationCode(client, 'auth-code-resource-mismatch', codeVerifier2, undefined, differentResource),
+            ).rejects.toThrow(InvalidTargetError);
+        });
+
+        it('should reject missing resource indicator when strictResource is true', async () => {
+            const resourceServer = new OAuthServer({
+                model,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                strictResource: true,
+            });
+
+            const { codeVerifier, codeChallenge } = generatePKCEPair();
+            const authCode: AuthorizationCode = {
+                authorizationCode: 'auth-code-resource',
+                clientId: client.client_id,
+                userId: 'user-123',
+                scopes: ['mcp:tools'],
+                expiresAt: new Date(Date.now() + 1000000),
+                codeChallenge,
+                redirectUri: 'http://localhost:3000/callback',
+            };
+            await model.saveAuthorizationCode(authCode);
+
+            await expect(
+                resourceServer.exchangeAuthorizationCode(client, 'auth-code-resource', codeVerifier, undefined, undefined),
+            ).rejects.toThrow(InvalidTargetError);
+        });
+
+        it('should ignore missing resource indicator when strictResource is false', async () => {
+            const resourceServer = new OAuthServer({
+                model,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                strictResource: false,
+            });
+
+            const { codeVerifier, codeChallenge } = generatePKCEPair();
+            const authCode: AuthorizationCode = {
+                authorizationCode: 'auth-code-resource',
+                clientId: client.client_id,
+                userId: 'user-123',
+                scopes: ['mcp:tools'],
+                expiresAt: new Date(Date.now() + 1000000),
+                codeChallenge,
+                redirectUri: 'http://localhost:3000/callback',
+            };
+            await model.saveAuthorizationCode(authCode);
+
+            const result = await resourceServer.exchangeAuthorizationCode(client, 'auth-code-resource', codeVerifier, undefined, undefined);
+            expect(result).toBeTruthy();
+        });
+
+        it('should reject mismatching resource indicator when strictResource is false', async () => {
+            const resourceServer = new OAuthServer({
+                model,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                resourceServerUrl: new URL('http://localhost:3000/mcp'),
+                strictResource: false,
+            });
+
+            const { codeVerifier, codeChallenge } = generatePKCEPair();
+            const authCode: AuthorizationCode = {
+                authorizationCode: 'auth-code-resource-mismatch',
+                clientId: client.client_id,
+                userId: 'user-123',
+                scopes: ['mcp:tools'],
+                expiresAt: new Date(Date.now() + 1000000),
+                codeChallenge,
+                redirectUri: 'http://localhost:3000/callback',
+                resource: 'http://localhost:3000/mcp',
+            };
+            await model.saveAuthorizationCode(authCode);
+
+            await expect(
+                resourceServer.exchangeAuthorizationCode(
+                    client,
+                    'auth-code-resource-mismatch',
+                    codeVerifier,
+                    undefined,
+                    new URL('http://localhost:3000/different'),
+                ),
             ).rejects.toThrow(InvalidTargetError);
         });
 

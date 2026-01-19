@@ -17,6 +17,7 @@ describe('OAuthServer.verifyAccessToken', () => {
             model,
             authorizationUrl: new URL('http://localhost:3000/consent'),
             scopesSupported: ['mcp:tools', 'mcp:resources'],
+            strictResource: false,
         });
 
         client = createTestClient({
@@ -83,7 +84,7 @@ describe('OAuthServer.verifyAccessToken', () => {
             model,
             authorizationUrl: new URL('http://localhost:3000/consent'),
             scopesSupported: ['mcp:tools'],
-            mcpServerUrl: new URL('http://localhost:3000/mcp'),
+            resourceServerUrl: new URL('http://localhost:3000/mcp'),
         });
 
         const accessToken: AccessToken = {
@@ -105,7 +106,7 @@ describe('OAuthServer.verifyAccessToken', () => {
             model,
             authorizationUrl: new URL('http://localhost:3000/consent'),
             scopesSupported: ['mcp:tools'],
-            mcpServerUrl: new URL('http://localhost:3000/mcp'),
+            resourceServerUrl: new URL('http://localhost:3000/mcp'),
         });
 
         const accessToken: AccessToken = {
@@ -123,6 +124,28 @@ describe('OAuthServer.verifyAccessToken', () => {
 
         expect(authInfo).toBeDefined();
         expect(authInfo.resource?.href).toBe('http://localhost:3000/mcp');
+    });
+
+    it('should reject missing resource indicator when strictResource is true', async () => {
+        const resourceServer = new OAuthServer({
+            model,
+            authorizationUrl: new URL('http://localhost:3000/consent'),
+            scopesSupported: ['mcp:tools'],
+            resourceServerUrl: new URL('http://localhost:3000/mcp'),
+            strictResource: true,
+        });
+
+        const accessToken: AccessToken = {
+            token: 'token-correct-resource',
+            clientId: client.client_id,
+            userId: 'user-123',
+            scopes: ['mcp:tools'],
+            expiresAt: new Date(Date.now() + 3600000),
+        };
+
+        await model.saveAccessToken(accessToken, client);
+
+        await expect(resourceServer.verifyAccessToken('token-correct-resource')).rejects.toThrow(InvalidTargetError);
     });
 
     it('should accept token without resource when mcpServerUrl is not configured', async () => {
