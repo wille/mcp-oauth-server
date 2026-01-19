@@ -1,6 +1,6 @@
 {
   "name": "mcp-oauth-server",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "MCP first OAuth 2.1 Authorization Server",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
