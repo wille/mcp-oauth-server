@@ -189,6 +189,9 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
             client.client_id ||= crypto.randomUUID();
             client.client_id_issued_at ||= Math.floor(Date.now() / 1000);
 
+            // TODO
+            client.client_secret_expires_at ||= Math.floor(Date.now() / 1000) + this.clientSecretLifetime;
+
             // Force the client to announce the grant types it supports
             if (
                 !client.grant_types?.length ||

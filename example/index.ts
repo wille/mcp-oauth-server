@@ -14,7 +14,6 @@ const mcpServerUrl = new URL('http://localhost:3000/mcp');
 const mcpOAuthProvider = new OAuthServer({
     model: memoryOAuthServerModel,
     authorizationUrl: new URL('http://localhost:3000/consent'),
-    mcpServerUrl,
     scopesSupported: ['mcp:tools'],
     modifyAuthorizationRedirectUrl: (url, client, params) => {
         // Include metadata in the query string we can display on the consent screen.
