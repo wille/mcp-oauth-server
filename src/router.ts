@@ -3,9 +3,11 @@ import { clientRegistrationHandler, ClientRegistrationHandlerOptions } from './h
 import { tokenHandler, TokenHandlerOptions } from './handlers/token.js';
 import { authorizationHandler, AuthorizationHandlerOptions } from './handlers/authorize.js';
 import { revocationHandler, RevocationHandlerOptions } from './handlers/revoke.js';
+import { deviceAuthorizationHandler, DeviceAuthorizationHandlerOptions } from './handlers/device.js';
 import { metadataHandler } from './handlers/metadata.js';
-import { OAuthServerProvider } from './provider.js';
-import { OAuthMetadata, OAuthProtectedResourceMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthServer } from './OAuthServer.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE } from './deviceFlow.js';
+import { OAuthMetadata, OAuthProtectedResourceMetadata } from './schemas.js';
 
 // Check for dev mode flag that allows HTTP issuer URLs (for development/testing only)
 const allowInsecureIssuerUrl =
@@ -19,7 +21,7 @@ export type AuthRouterOptions = {
     /**
      * A provider implementing the actual authorization logic for this router.
      */
-    provider: OAuthServerProvider;
+    provider: OAuthServer;
 
     /**
      * The authorization server's issuer identifier, which is a URL that uses the "https" scheme and has no query or fragment components.
@@ -39,11 +41,6 @@ export type AuthRouterOptions = {
     serviceDocumentationUrl?: URL;
 
     /**
-     * An optional list of scopes supported by this authorization server
-     */
-    scopesSupported?: string[];
-
-    /**
      * The resource name to be displayed in protected resource metadata
      */
     resourceName?: string;
@@ -54,11 +51,17 @@ export type AuthRouterOptions = {
      */
     resourceServerUrl?: URL;
 
+    /**
+     * Scopes supported by this authorization server (OAuth metadata and protected-resource metadata).
+     * Falls back to {@link OAuthServer.scopesSupported} on the provider when omitted.
+     */
+    scopesSupported?: string[];
     // Individual options per route
     authorizationOptions?: Omit<AuthorizationHandlerOptions, 'provider'>;
-    clientRegistrationOptions?: Omit<ClientRegistrationHandlerOptions, 'clientsStore'>;
+    clientRegistrationOptions?: Omit<ClientRegistrationHandlerOptions, 'provider'>;
     revocationOptions?: Omit<RevocationHandlerOptions, 'provider'>;
     tokenOptions?: Omit<TokenHandlerOptions, 'provider'>;
+    deviceAuthorizationOptions?: Omit<DeviceAuthorizationHandlerOptions, 'provider'>;
 };
 
 const checkIssuerUrl = (issuer: URL): void => {
@@ -75,7 +78,7 @@ const checkIssuerUrl = (issuer: URL): void => {
 };
 
 export const createOAuthMetadata = (options: {
-    provider: OAuthServerProvider;
+    provider: OAuthServer;
     issuerUrl: URL;
     baseUrl?: URL;
     serviceDocumentationUrl?: URL;
@@ -88,20 +91,33 @@ export const createOAuthMetadata = (options: {
 
     const basePath = baseUrl.pathname.endsWith('/') ? baseUrl.pathname.slice(0, -1) : baseUrl.pathname;
 
-    const registration_endpoint = options.provider.clientsStore.registerClient ? new URL(`${basePath}/register`, baseUrl).href : undefined;
-    const revocation_endpoint = options.provider.revokeToken ? new URL(`${basePath}/revoke`, baseUrl).href : undefined;
+    const registration_endpoint = options.provider.dynamicClientRegistration ? new URL(`${basePath}/register`, baseUrl).href : undefined;
+    const revocation_endpoint = new URL(`${basePath}/revoke`, baseUrl).href;
 
-    const metadata: OAuthMetadata = {
+    const enableAuthorizationCodeGrant = options.provider.grantTypes.includes('authorization_code');
+
+    const grant_types_supported = ['refresh_token'];
+    if (enableAuthorizationCodeGrant) {
+        grant_types_supported.unshift('authorization_code');
+    }
+    if (options.provider.grantTypes.includes('client_credentials')) {
+        grant_types_supported.push('client_credentials');
+    }
+    if (options.provider.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) && options.provider.deviceAuthorizationUrl) {
+        grant_types_supported.push(DEVICE_AUTHORIZATION_GRANT_TYPE);
+    }
+
+    const metadata = {
         issuer: issuer.href,
         service_documentation: options.serviceDocumentationUrl?.href,
 
-        authorization_endpoint: new URL(`${basePath}/authorize`, baseUrl).href,
-        response_types_supported: ['code'],
+        authorization_endpoint: enableAuthorizationCodeGrant ? new URL(`${basePath}/authorize`, baseUrl).href : undefined,
+        response_types_supported: enableAuthorizationCodeGrant ? ['code'] : [],
         code_challenge_methods_supported: ['S256'],
 
         token_endpoint: new URL(`${basePath}/token`, baseUrl).href,
         token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
-        grant_types_supported: ['authorization_code', 'refresh_token'],
+        grant_types_supported,
 
         scopes_supported: options.scopesSupported,
 
@@ -109,7 +125,12 @@ export const createOAuthMetadata = (options: {
         revocation_endpoint_auth_methods_supported: revocation_endpoint ? ['client_secret_post'] : undefined,
 
         registration_endpoint,
-    };
+
+        device_authorization_endpoint:
+            options.provider.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) && options.provider.deviceAuthorizationUrl
+                ? new URL(`${basePath}/device`, baseUrl).href
+                : undefined,
+    } as OAuthMetadata;
 
     return metadata;
 };
@@ -131,12 +152,20 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
 
     const router = express.Router();
 
-    router.use(
-        new URL(oauthMetadata.authorization_endpoint).pathname,
-        authorizationHandler({ provider: options.provider, ...options.authorizationOptions }),
-    );
+    if (options.provider.grantTypes.includes('authorization_code')) {
+        router.use(
+            new URL(oauthMetadata.authorization_endpoint).pathname,
+            authorizationHandler({ provider: options.provider, ...options.authorizationOptions }),
+        );
+    }
 
-    router.use(new URL(oauthMetadata.token_endpoint).pathname, tokenHandler({ provider: options.provider, ...options.tokenOptions }));
+    router.use(
+        new URL(oauthMetadata.token_endpoint).pathname,
+        tokenHandler({
+            provider: options.provider,
+            ...options.tokenOptions,
+        }),
+    );
 
     router.use(
         mcpAuthMetadataRouter({
@@ -145,16 +174,23 @@ export function mcpAuthRouter(options: AuthRouterOptions): RequestHandler {
             // Prefer explicit RS; otherwise fall back to AS baseUrl, then to issuer (back-compat)
             resourceServerUrl: options.resourceServerUrl ?? options.baseUrl ?? new URL(oauthMetadata.issuer),
             serviceDocumentationUrl: options.serviceDocumentationUrl,
-            scopesSupported: options.scopesSupported,
+            scopesSupported: options.scopesSupported ?? options.provider.scopesSupported,
             resourceName: options.resourceName,
         }),
     );
 
-    if (oauthMetadata.registration_endpoint) {
+    if (oauthMetadata.device_authorization_endpoint) {
+        router.use(
+            new URL(oauthMetadata.device_authorization_endpoint).pathname,
+            deviceAuthorizationHandler({ provider: options.provider, ...options.deviceAuthorizationOptions }),
+        );
+    }
+
+    if (options.provider.dynamicClientRegistration && oauthMetadata.registration_endpoint) {
         router.use(
             new URL(oauthMetadata.registration_endpoint).pathname,
             clientRegistrationHandler({
-                clientsStore: options.provider.clientsStore,
+                provider: options.provider,
                 ...options.clientRegistrationOptions,
             }),
         );

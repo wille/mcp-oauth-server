@@ -1,22 +1,22 @@
 import * as z from 'zod/v4';
 import express, { RequestHandler } from 'express';
-import { OAuthServerProvider } from '../provider.js';
+import { OAuthServer } from '../OAuthServer.js';
 import cors from 'cors';
-import { verifyChallenge } from 'pkce-challenge';
 import { authenticateClient } from '../middleware/clientAuth.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import {
     InvalidRequestError,
-    InvalidGrantError,
     UnsupportedGrantTypeError,
+    UnauthorizedClientError,
     ServerError,
     TooManyRequestsError,
     OAuthError,
 } from '../errors.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
 
 export type TokenHandlerOptions = {
-    provider: OAuthServerProvider;
+    provider: OAuthServer;
     /**
      * Rate limiting configuration for the token endpoint.
      * Set to false to disable rate limiting for this endpoint.
@@ -40,6 +40,21 @@ const RefreshTokenGrantSchema = z.object({
     scope: z.string().optional(),
     resource: z.string().url().optional(),
 });
+
+const DeviceCodeGrantSchema = z.object({
+    device_code: z.string(),
+});
+
+const ClientCredentialsGrantSchema = z.object({
+    scope: z.string().optional(),
+    resource: z.string().url().optional(),
+});
+
+function assertClientSupportsGrant(client: { grant_types?: string[] }, grantType: string): void {
+    if (!client.grant_types?.includes(grantType)) {
+        throw new UnauthorizedClientError(`Client is not authorized to use ${grantType} grant`);
+    }
+}
 
 export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHandlerOptions): RequestHandler {
     // Nested router so we can configure middleware and restrict HTTP method
@@ -66,7 +81,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
     }
 
     // Authenticate and extract client details
-    router.use(authenticateClient({ clientsStore: provider.clientsStore }));
+    router.use(authenticateClient({ clientsStore: provider }));
 
     router.post('/', async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
@@ -87,6 +102,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
 
             switch (grant_type) {
                 case 'authorization_code': {
+                    assertClientSupportsGrant(client, 'authorization_code');
                     const parseResult = AuthorizationCodeGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
                         throw new InvalidRequestError(parseResult.error.message);
@@ -94,22 +110,10 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
 
                     const { code, code_verifier, redirect_uri, resource } = parseResult.data;
 
-                    const skipLocalPkceValidation = provider.skipLocalPkceValidation;
-
-                    // Perform local PKCE validation unless explicitly skipped
-                    // (e.g. to validate code_verifier in upstream server)
-                    if (!skipLocalPkceValidation) {
-                        const codeChallenge = await provider.challengeForAuthorizationCode(client, code);
-                        if (!(await verifyChallenge(code_verifier, codeChallenge))) {
-                            throw new InvalidGrantError('code_verifier does not match the challenge');
-                        }
-                    }
-
-                    // Passes the code_verifier to the provider if PKCE validation didn't occur locally
                     const tokens = await provider.exchangeAuthorizationCode(
                         client,
                         code,
-                        skipLocalPkceValidation ? code_verifier : undefined,
+                        code_verifier,
                         redirect_uri,
                         resource ? new URL(resource) : undefined,
                     );
@@ -118,6 +122,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                 }
 
                 case 'refresh_token': {
+                    assertClientSupportsGrant(client, 'refresh_token');
                     const parseResult = RefreshTokenGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
                         throw new InvalidRequestError(parseResult.error.message);
@@ -135,8 +140,34 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                     res.status(200).json(tokens);
                     break;
                 }
-                // Additional auth methods will not be added on the server side of the SDK.
-                case 'client_credentials':
+
+                case DEVICE_AUTHORIZATION_GRANT_TYPE: {
+                    assertClientSupportsGrant(client, DEVICE_AUTHORIZATION_GRANT_TYPE);
+                    const parseResult = DeviceCodeGrantSchema.safeParse(req.body);
+                    if (!parseResult.success) {
+                        throw new InvalidRequestError(parseResult.error.message);
+                    }
+                    const { device_code } = parseResult.data;
+                    const tokens = await provider.exchangeDeviceCode(client, device_code);
+                    res.status(200).json(tokens);
+                    break;
+                }
+
+                case 'client_credentials': {
+                    assertClientSupportsGrant(client, 'client_credentials');
+
+                    const parseResult = ClientCredentialsGrantSchema.safeParse(req.body);
+                    if (!parseResult.success) {
+                        throw new InvalidRequestError(parseResult.error.message);
+                    }
+
+                    const { scope, resource } = parseResult.data;
+                    const scopes = scope?.split(' ');
+                    const tokens = await provider.exchangeClientCredentials(client, scopes, resource ? new URL(resource) : undefined);
+                    res.status(200).json(tokens);
+                    break;
+                }
+
                 default:
                     throw new UnsupportedGrantTypeError('The grant type is not supported by this authorization server.');
             }

@@ -27,13 +27,9 @@ const mcpOAuthProvider = new OAuthServer({
 
 const mcpAuthMiddleware = mcpAuthRouter({
     provider: mcpOAuthProvider,
-    issuerUrl: new URL('http://localhost:4444/'),
+    issuerUrl: new URL('http://localhost:3000/'),
     resourceServerUrl: mcpServerUrl,
     scopesSupported: ['mcp:tools'],
-
-    clientRegistrationOptions: {
-        clientIdGeneration: true,
-    },
 });
 
 function main() {
@@ -65,14 +61,22 @@ function main() {
         const clientName = qs.get('client_name');
         const resource = qs.get('resource');
 
+        const formFields: Record<string, string> = {};
+        qs.forEach((value, key) => {
+            formFields[key] = value;
+        });
+
         res.setHeader('Content-Type', 'text/html');
         res.send(`
             <html>
                 <body>
                     <h1>Login to ${clientName || resource}</h1>
-                    <form action="/confirm?${qs.toString()}" method="POST">
+                    <form action="/confirm" method="POST">
                         <input type="text" name="user_id" placeholder="User ID to authenticate as" required>
                         <input type="submit" value="Give consent">
+                        ${Object.entries(formFields)
+                            .map(([key, value]) => `<input type="hidden" name="${key}" value="${value}">`)
+                            .join('')}
                     </form>
                     <pre>${JSON.stringify(Object.fromEntries(qs.entries()), null, 2)}</pre>
                 </body>
@@ -138,7 +142,7 @@ function main() {
         await transport.handleRequest(req, res, req.body);
     });
 
-    app.listen(4444, () => {
+    app.listen(3000, () => {
         console.log('Server is running on port 3000');
     });
 }

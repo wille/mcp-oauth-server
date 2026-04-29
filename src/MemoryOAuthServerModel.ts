@@ -1,7 +1,8 @@
-import { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformationFull } from './schemas.js';
 import debug from 'debug';
 import { OAuthServerModel } from './OAuthServerModel';
-import { AccessToken, RefreshToken, AuthorizationCode } from './types';
+import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization } from './types';
+import { normalizeDeviceUserCode } from './deviceFlow';
 
 const log = debug('oauth:MemoryOAuthServerModel');
 
@@ -10,9 +11,11 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     private refreshTokens = new Map<string, RefreshToken>();
     private clients = new Map<string, OAuthClientInformationFull>();
     private authorizationCodes = new Map<string, AuthorizationCode>();
+    private deviceByDeviceCode = new Map<string, DeviceAuthorization>();
+    private deviceCodeByUserCode = new Map<string, string>();
 
-    async saveAuthorizationCode(params: AuthorizationCode): Promise<void> {
-        await this.authorizationCodes.set(params.authorizationCode, params);
+    async saveAuthorizationCode(params: AuthorizationCode, _client?: OAuthClientInformationFull): Promise<void> {
+        this.authorizationCodes.set(params.authorizationCode, params);
     }
 
     async getAuthorizationCode(authorizationCode: string): Promise<AuthorizationCode | undefined> {
@@ -56,5 +59,31 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
         this.clients.set(clientMetadata.client_id, clientMetadata);
         return clientMetadata;
+    }
+
+    async saveDeviceAuthorization(device: DeviceAuthorization): Promise<void> {
+        const key = normalizeDeviceUserCode(device.userCode);
+        this.deviceByDeviceCode.set(device.deviceCode, device);
+        this.deviceCodeByUserCode.set(key, device.deviceCode);
+    }
+
+    async getDeviceAuthorizationByDeviceCode(deviceCode: string): Promise<DeviceAuthorization | undefined> {
+        return this.deviceByDeviceCode.get(deviceCode);
+    }
+
+    async getDeviceAuthorizationByUserCode(normalizedUserCode: string): Promise<DeviceAuthorization | undefined> {
+        const deviceCode = this.deviceCodeByUserCode.get(normalizedUserCode);
+        if (!deviceCode) {
+            return undefined;
+        }
+        return this.deviceByDeviceCode.get(deviceCode);
+    }
+
+    async deleteDeviceAuthorization(deviceCode: string): Promise<void> {
+        const device = this.deviceByDeviceCode.get(deviceCode);
+        if (device) {
+            this.deviceCodeByUserCode.delete(normalizeDeviceUserCode(device.userCode));
+        }
+        this.deviceByDeviceCode.delete(deviceCode);
     }
 }

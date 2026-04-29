@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
 
 describe('OAuthServer Client Registration', () => {
     let oauthServer: OAuthServer;
@@ -11,6 +12,7 @@ describe('OAuthServer Client Registration', () => {
         oauthServer = new OAuthServer({
             model,
             authorizationUrl: new URL('http://localhost:3000/consent'),
+            grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
             scopesSupported: ['mcp:tools', 'mcp:resources'],
         });
     });
@@ -24,7 +26,7 @@ describe('OAuthServer Client Registration', () => {
                 token_endpoint_auth_method: 'none' as const,
             };
 
-            const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+            const registered = await oauthServer.registerClient!(clientMetadata);
 
             expect(registered).toBeDefined();
             expect(registered.client_id).toBeDefined();
@@ -44,7 +46,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.client_id).toBeDefined();
                 expect(registered.client_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
@@ -59,9 +61,11 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
-                expect(registered.client_id).toBe('custom-client-id');
+                expect(registered.client_id).toBeDefined();
+                expect(registered.client_id).not.toBe('custom-client-id');
+                expect(registered.client_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
             });
         });
 
@@ -74,7 +78,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.grant_types).toEqual(['authorization_code']);
             });
@@ -87,7 +91,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.grant_types).toEqual(['refresh_token']);
             });
@@ -100,23 +104,24 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.grant_types).toEqual(['authorization_code', 'refresh_token']);
             });
 
-            it('should throw error for unsupported grant type', async () => {
+            it('should accept client_credentials grant type', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['client_credentials'],
-                    response_types: ['code'],
-                    token_endpoint_auth_method: 'none' as const,
+                    token_endpoint_auth_method: 'client_secret_post' as const,
                 };
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+
+                expect(registered.grant_types).toEqual(['client_credentials']);
             });
 
-            it('should throw error when grant_types array contains unsupported grant', async () => {
+            it('should accept client_credentials together with authorization_code', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'client_credentials'],
@@ -124,21 +129,66 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+
+                expect(registered.grant_types).toEqual(['authorization_code', 'client_credentials']);
             });
 
-            it('should throw error when grant_types is undefined', async () => {
+            it('should throw error when grant_types array contains unsupported grant', async () => {
+                const clientMetadata = {
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    grant_types: ['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+                    response_types: ['code'],
+                    token_endpoint_auth_method: 'none' as const,
+                };
+
+                await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+            });
+
+            it('defaults grant_types to authorization_code when omitted', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     response_types: ['code'],
                     token_endpoint_auth_method: 'none' as const,
                 } as any;
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.grant_types).toEqual(['authorization_code']);
+            });
+
+            it('should reject device grant when verificationUri is not configured', async () => {
+                const clientMetadata = {
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    grant_types: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+                    response_types: ['code'],
+                    token_endpoint_auth_method: 'none' as const,
+                };
+
+                await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+            });
+
+            it('should accept device grant when verificationUri is configured', async () => {
+                const withDevice = new OAuthServer({
+                    model: new MemoryOAuthServerModel(),
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    deviceAuthorizationUrl: new URL('http://localhost:3000/device'),
+                    grantTypes: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+                    scopesSupported: ['mcp:tools'],
+                });
+
+                const clientMetadata = {
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    grant_types: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+                    response_types: ['code'],
+                    token_endpoint_auth_method: 'none' as const,
+                };
+
+                const registered = await withDevice.registerClient!(clientMetadata);
+                expect(registered.grant_types).toContain(DEVICE_AUTHORIZATION_GRANT_TYPE);
             });
         });
 
-        describe('response_types validation', () => {
+        describe('response_types handling', () => {
             it('should accept response_type code', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
@@ -147,12 +197,12 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.response_types).toEqual(['code']);
             });
 
-            it('should throw error for unsupported response_type', async () => {
+            it('stores unsupported response_types without register-time validation', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'refresh_token'],
@@ -160,10 +210,11 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported response_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.response_types).toEqual(['token']);
             });
 
-            it('should throw error when response_types first element is not code', async () => {
+            it('stores non-code first response_type without register-time validation', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'refresh_token'],
@@ -171,17 +222,19 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported response_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.response_types).toEqual(['token', 'code']);
             });
 
-            it('should throw error when response_types is undefined', async () => {
+            it('allows response_types to be undefined', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'refresh_token'],
                     token_endpoint_auth_method: 'none' as const,
                 } as any;
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow('Unsupported response_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.response_types).toBeUndefined();
             });
         });
 
@@ -194,7 +247,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.token_endpoint_auth_method).toBe('none');
             });
@@ -207,7 +260,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'client_secret_post' as const,
                 };
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 expect(registered.token_endpoint_auth_method).toBe('client_secret_post');
             });
@@ -220,9 +273,7 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'client_secret_basic' as any,
                 };
 
-                await expect(oauthServer.clientsStore.registerClient!(clientMetadata)).rejects.toThrow(
-                    'Unsupported token_endpoint_auth_method',
-                );
+                await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported token_endpoint_auth_method');
             });
 
             it('should allow token_endpoint_auth_method to be undefined (defaults to none)', async () => {
@@ -232,7 +283,7 @@ describe('OAuthServer Client Registration', () => {
                     response_types: ['code'],
                 } as any;
 
-                const registered = await oauthServer.clientsStore.registerClient!(clientMetadata);
+                const registered = await oauthServer.registerClient!(clientMetadata);
 
                 // When undefined, it should still be registered (the model may handle defaults)
                 expect(registered).toBeDefined();

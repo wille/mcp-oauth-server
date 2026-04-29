@@ -69,8 +69,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
         // Phase 1: Validate client_id and redirect_uri. Any errors here must be direct responses.
         let client_id, redirect_uri, client, user;
         try {
-            // const result = ClientAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
-            const result = ClientAuthorizationParamsSchema.safeParse(req.query);
+            const result = ClientAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
 
             if (!result.success) {
                 throw new InvalidRequestError(result.error.message);
@@ -79,7 +78,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
             client_id = result.data.client_id;
             redirect_uri = result.data.redirect_uri;
 
-            client = await provider.clientsStore.getClient(client_id);
+            client = await provider.getClient(client_id);
             if (!client) {
                 throw new InvalidClientError('Invalid client_id');
             }
@@ -120,8 +119,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
         let state;
         try {
             // Parse and validate authorization parameters
-            // const parseResult = RequestAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
-            const parseResult = RequestAuthorizationParamsSchema.safeParse(req.query);
+            const parseResult = RequestAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
             if (!parseResult.success) {
                 throw new InvalidRequestError(parseResult.error.message);
             }

@@ -1,10 +1,10 @@
 import { revocationHandler, RevocationHandlerOptions } from '../../handlers/revoke.js';
-import { OAuthServerProvider, AuthorizationParams } from '../../provider.js';
+import { OAuthServer } from '../../OAuthServer.js';
 import { OAuthRegisteredClientsStore } from '../../clients.js';
 import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
-import { AuthInfo } from '../../types.js';
+import { AuthInfo, AuthorizationParams } from '../../types.js';
 import { InvalidTokenError } from '../../errors.js';
 import { MockInstance } from 'vitest';
 
@@ -27,105 +27,27 @@ describe('Revocation Handler', () => {
     };
 
     // Mock provider with revocation capability
-    const mockProviderWithRevocation: OAuthServerProvider = {
-        clientsStore: mockClientStore,
-
-        async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
-            res.redirect('https://example.com/callback?code=mock_auth_code');
-        },
-
-        async challengeForAuthorizationCode(): Promise<string> {
-            return 'mock_challenge';
-        },
-
-        async exchangeAuthorizationCode(): Promise<OAuthTokens> {
-            return {
-                access_token: 'mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'mock_refresh_token',
-            };
-        },
-
-        async exchangeRefreshToken(): Promise<OAuthTokens> {
-            return {
-                access_token: 'new_mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token',
-            };
-        },
-
-        async verifyAccessToken(token: string): Promise<AuthInfo> {
-            if (token === 'valid_token') {
-                return {
-                    token,
-                    clientId: 'valid-client',
-                    scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600,
-                };
-            }
-            throw new InvalidTokenError('Token is invalid or expired');
-        },
+    const mockProviderWithRevocation: Pick<OAuthServer, 'getClient' | 'revokeToken'> = {
+        getClient: async (clientId: string) => Promise.resolve(mockClientStore.getClient(clientId)),
 
         async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
             // Success - do nothing in mock
         },
     };
 
-    // Mock provider without revocation capability
-    const mockProviderWithoutRevocation: OAuthServerProvider = {
-        clientsStore: mockClientStore,
-
-        async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
-            res.redirect('https://example.com/callback?code=mock_auth_code');
-        },
-
-        async challengeForAuthorizationCode(): Promise<string> {
-            return 'mock_challenge';
-        },
-
-        async exchangeAuthorizationCode(): Promise<OAuthTokens> {
-            return {
-                access_token: 'mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'mock_refresh_token',
-            };
-        },
-
-        async exchangeRefreshToken(): Promise<OAuthTokens> {
-            return {
-                access_token: 'new_mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token',
-            };
-        },
-
-        async verifyAccessToken(token: string): Promise<AuthInfo> {
-            if (token === 'valid_token') {
-                return {
-                    token,
-                    clientId: 'valid-client',
-                    scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600,
-                };
-            }
-            throw new InvalidTokenError('Token is invalid or expired');
-        },
-
-        // No revokeToken method
-    };
+    // Mock provider without revocation capability (handler checks revokeToken at runtime)
+    const mockProviderWithoutRevocation = {
+        getClient: async (clientId: string) => Promise.resolve(mockClientStore.getClient(clientId)),
+    } as OAuthServer;
 
     describe('Handler creation', () => {
         it('throws error if provider does not support token revocation', () => {
-            const options: RevocationHandlerOptions = { provider: mockProviderWithoutRevocation };
+            const options: RevocationHandlerOptions = { provider: mockProviderWithoutRevocation as OAuthServer };
             expect(() => revocationHandler(options)).toThrow('does not support revoking tokens');
         });
 
         it('creates handler if provider supports token revocation', () => {
-            const options: RevocationHandlerOptions = { provider: mockProviderWithRevocation };
+            const options: RevocationHandlerOptions = { provider: mockProviderWithRevocation as OAuthServer };
             expect(() => revocationHandler(options)).not.toThrow();
         });
     });
@@ -137,7 +59,7 @@ describe('Revocation Handler', () => {
         beforeEach(() => {
             // Setup express app with revocation handler
             app = express();
-            const options: RevocationHandlerOptions = { provider: mockProviderWithRevocation };
+            const options: RevocationHandlerOptions = { provider: mockProviderWithRevocation as OAuthServer };
             app.use('/revoke', revocationHandler(options));
 
             // Spy on the revokeToken method

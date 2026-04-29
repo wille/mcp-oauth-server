@@ -1,10 +1,10 @@
 import { authorizationHandler, AuthorizationHandlerOptions } from '../../handlers/authorize.js';
-import { OAuthServerProvider, AuthorizationParams } from '../../provider.js';
+import { OAuthServer } from '../../OAuthServer.js';
 import { OAuthRegisteredClientsStore } from '../../clients.js';
 import { OAuthClientInformationFull, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
-import { AuthInfo } from '../../types.js';
+import { AuthInfo, AuthorizationParams } from '../../types.js';
 import { InvalidTokenError } from '../../errors.js';
 
 describe('Authorization Handler', () => {
@@ -35,9 +35,9 @@ describe('Authorization Handler', () => {
         },
     };
 
-    // Mock provider
-    const mockProvider: OAuthServerProvider = {
-        clientsStore: mockClientStore,
+    // Mock provider (normalize store getClient to Promise — OAuthServer.getClient is async-only)
+    const mockProvider: Pick<OAuthServer, 'getClient' | 'authorize'> = {
+        getClient: async (clientId: string) => Promise.resolve(mockClientStore.getClient(clientId)),
 
         async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
             // Mock implementation - redirects to redirectUri with code and state
@@ -48,44 +48,6 @@ describe('Authorization Handler', () => {
             }
             res.redirect(302, redirectUrl.toString());
         },
-
-        async challengeForAuthorizationCode(): Promise<string> {
-            return 'mock_challenge';
-        },
-
-        async exchangeAuthorizationCode(): Promise<OAuthTokens> {
-            return {
-                access_token: 'mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'mock_refresh_token',
-            };
-        },
-
-        async exchangeRefreshToken(): Promise<OAuthTokens> {
-            return {
-                access_token: 'new_mock_access_token',
-                token_type: 'bearer',
-                expires_in: 3600,
-                refresh_token: 'new_mock_refresh_token',
-            };
-        },
-
-        async verifyAccessToken(token: string): Promise<AuthInfo> {
-            if (token === 'valid_token') {
-                return {
-                    token,
-                    clientId: 'valid-client',
-                    scopes: ['read', 'write'],
-                    expiresAt: Date.now() / 1000 + 3600,
-                };
-            }
-            throw new InvalidTokenError('Token is invalid or expired');
-        },
-
-        async revokeToken(): Promise<void> {
-            // Do nothing in mock
-        },
     };
 
     // Setup express app with handler
@@ -94,7 +56,7 @@ describe('Authorization Handler', () => {
 
     beforeEach(() => {
         app = express();
-        options = { provider: mockProvider };
+        options = { provider: mockProvider as OAuthServer };
         const handler = authorizationHandler(options);
         app.use('/authorize', handler);
     });

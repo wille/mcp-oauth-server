@@ -1,13 +1,13 @@
 import { RequestHandler } from 'express';
 import * as z from 'zod/v4';
 import express from 'express';
-import { OAuthServerProvider } from '../provider.js';
+import { OAuthServer } from '../OAuthServer.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
 
 export type AuthorizationHandlerOptions = {
-    provider: OAuthServerProvider;
+    provider: OAuthServer;
     /**
      * Rate limiting configuration for the authorization endpoint.
      * Set to false to disable rate limiting for this endpoint.
@@ -72,7 +72,7 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
             client_id = result.data.client_id;
             redirect_uri = result.data.redirect_uri;
 
-            client = await provider.clientsStore.getClient(client_id);
+            client = await provider.getClient(client_id);
             if (!client) {
                 throw new InvalidClientError('Invalid client_id');
             }

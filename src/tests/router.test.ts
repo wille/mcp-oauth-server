@@ -1,38 +1,36 @@
 import { mcpAuthRouter, AuthRouterOptions, mcpAuthMetadataRouter, AuthMetadataOptions } from '../router.js';
-import { OAuthServerProvider, AuthorizationParams } from '../provider.js';
-import { OAuthRegisteredClientsStore } from '../clients.js';
-import {
-    OAuthClientInformationFull,
-    OAuthMetadata,
-    OAuthTokenRevocationRequest,
-    OAuthTokens,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthServer } from '../OAuthServer.js';
+import { OAuthClientInformationFull, OAuthMetadata, OAuthTokenRevocationRequest, OAuthTokens } from '../schemas.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
-import { AuthInfo } from '../types.js';
+import { AuthInfo, AuthorizationParams } from '../types.js';
 import { InvalidTokenError } from '../errors.js';
 
 describe('MCP Auth Router', () => {
     // Setup mock provider with full capabilities
-    const mockClientStore: OAuthRegisteredClientsStore = {
-        async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
-            if (clientId === 'valid-client') {
-                return {
-                    client_id: 'valid-client',
-                    client_secret: 'valid-secret',
-                    redirect_uris: ['https://example.com/callback'],
-                };
-            }
-            return undefined;
-        },
-
-        async registerClient(client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> {
-            return client;
-        },
+    const mockGetClient = async (clientId: string): Promise<OAuthClientInformationFull | undefined> => {
+        if (clientId === 'valid-client') {
+            return {
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                redirect_uris: ['https://example.com/callback'],
+            };
+        }
+        return undefined;
+    };
+    const mockRegisterClient = async (client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> => {
+        return client;
     };
 
-    const mockProvider: OAuthServerProvider = {
-        clientsStore: mockClientStore,
+    const mockProvider = {
+        authorizationUrl: new URL('https://auth.example.com/consent'),
+        grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
+        dynamicClientRegistration: true,
+        model: {
+            registerClient: mockRegisterClient,
+        },
+        getClient: mockGetClient,
+        registerClient: mockRegisterClient,
 
         async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
             const redirectUrl = new URL(params.redirectUri);
@@ -41,10 +39,6 @@ describe('MCP Auth Router', () => {
                 redirectUrl.searchParams.set('state', params.state);
             }
             res.redirect(302, redirectUrl.toString());
-        },
-
-        async challengeForAuthorizationCode(): Promise<string> {
-            return 'mock_challenge';
         },
 
         async exchangeAuthorizationCode(): Promise<OAuthTokens> {
@@ -65,6 +59,14 @@ describe('MCP Auth Router', () => {
             };
         },
 
+        async exchangeClientCredentials(): Promise<OAuthTokens> {
+            return {
+                access_token: 'mock_access_token',
+                token_type: 'bearer',
+                expires_in: 3600,
+            };
+        },
+
         async verifyAccessToken(token: string): Promise<AuthInfo> {
             if (token === 'valid_token') {
                 return {
@@ -80,21 +82,23 @@ describe('MCP Auth Router', () => {
         async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
             // Success - do nothing in mock
         },
-    };
+    } as unknown as OAuthServer;
 
     // Provider without registration and revocation
-    const mockProviderMinimal: OAuthServerProvider = {
-        clientsStore: {
-            async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
-                if (clientId === 'valid-client') {
-                    return {
-                        client_id: 'valid-client',
-                        client_secret: 'valid-secret',
-                        redirect_uris: ['https://example.com/callback'],
-                    };
-                }
-                return undefined;
-            },
+    const mockProviderMinimal = {
+        authorizationUrl: new URL('https://auth.example.com/consent'),
+        grantTypes: ['authorization_code', 'refresh_token'],
+        dynamicClientRegistration: false,
+        model: {},
+        async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
+            if (clientId === 'valid-client') {
+                return {
+                    client_id: 'valid-client',
+                    client_secret: 'valid-secret',
+                    redirect_uris: ['https://example.com/callback'],
+                };
+            }
+            return undefined;
         },
 
         async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
@@ -104,10 +108,6 @@ describe('MCP Auth Router', () => {
                 redirectUrl.searchParams.set('state', params.state);
             }
             res.redirect(302, redirectUrl.toString());
-        },
-
-        async challengeForAuthorizationCode(): Promise<string> {
-            return 'mock_challenge';
         },
 
         async exchangeAuthorizationCode(): Promise<OAuthTokens> {
@@ -139,7 +139,10 @@ describe('MCP Auth Router', () => {
             }
             throw new InvalidTokenError('Token is invalid or expired');
         },
-    };
+        async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
+            // Success - do nothing in mock
+        },
+    } as unknown as OAuthServer;
 
     describe('Router creation', () => {
         it('throws error for non-HTTPS issuer URL', () => {
@@ -186,6 +189,38 @@ describe('MCP Auth Router', () => {
 
             expect(() => mcpAuthRouter(options)).not.toThrow();
         });
+
+        it('throws when device_code grant is enabled without deviceAuthorizationUrl', () => {
+            expect(
+                () =>
+                    new OAuthServer({
+                        authorizationUrl: new URL('https://auth.example.com/consent'),
+                        grantTypes: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
+                    }),
+            ).toThrow('device_code grant requires deviceAuthorizationUrl');
+        });
+
+        it('throws when dynamic registration is enabled without model.registerClient', () => {
+            expect(
+                () =>
+                    new OAuthServer({
+                        authorizationUrl: new URL('https://auth.example.com/consent'),
+                        dynamicClientRegistration: true,
+                        model: {
+                            getClient: async () => undefined,
+                            saveAuthorizationCode: async () => undefined,
+                            getAuthorizationCode: async () => undefined,
+                            revokeAuthorizationCode: async () => undefined,
+                            saveAccessToken: async () => undefined,
+                            getAccessToken: async () => undefined,
+                            revokeAccessToken: async () => undefined,
+                            saveRefreshToken: async () => undefined,
+                            getRefreshToken: async () => undefined,
+                            revokeRefreshToken: async () => undefined,
+                        },
+                    }),
+            ).toThrow('dynamic client registration is not supported by this authorization server');
+        });
     });
 
     describe('Metadata endpoint', () => {
@@ -216,7 +251,7 @@ describe('MCP Auth Router', () => {
 
             // Verify supported features
             expect(response.body.response_types_supported).toEqual(['code']);
-            expect(response.body.grant_types_supported).toEqual(['authorization_code', 'refresh_token']);
+            expect(response.body.grant_types_supported).toEqual(['authorization_code', 'refresh_token', 'client_credentials']);
             expect(response.body.code_challenge_methods_supported).toEqual(['S256']);
             expect(response.body.token_endpoint_auth_methods_supported).toEqual(['client_secret_post', 'none']);
             expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
@@ -245,8 +280,8 @@ describe('MCP Auth Router', () => {
 
             // Verify missing optional endpoints
             expect(response.body.registration_endpoint).toBeUndefined();
-            expect(response.body.revocation_endpoint).toBeUndefined();
-            expect(response.body.revocation_endpoint_auth_methods_supported).toBeUndefined();
+            expect(response.body.revocation_endpoint).toBe('https://auth.example.com/revoke');
+            expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
             expect(response.body.service_documentation).toBeUndefined();
         });
 
@@ -382,13 +417,13 @@ describe('MCP Auth Router', () => {
                 });
             expect(regResponse.status).toBe(404);
 
-            // Revocation should not be available
+            // Revocation is always available
             const revokeResponse = await supertest(minimalApp).post('/revoke').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
                 token: 'token_to_revoke',
             });
-            expect(revokeResponse.status).toBe(404);
+            expect(revokeResponse.status).not.toBe(404);
         });
     });
 });

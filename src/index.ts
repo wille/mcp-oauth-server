@@ -1,17 +1,22 @@
 export { OAuthServer } from './OAuthServer';
 export type { OAuthServerModel } from './OAuthServerModel';
-export type { AccessToken, RefreshToken, AuthorizationCode } from './types';
+export type {
+    AccessToken,
+    RefreshToken,
+    AuthorizationCode,
+    DeviceAuthorization,
+    DeviceAuthorizationEndpointResponse,
+    DeviceAuthorizationStatus,
+} from './types';
+export { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceUserCode, normalizeDeviceUserCode } from './deviceFlow';
 export { authenticateHandler } from './handlers/authenticate';
+export { approveDeviceAuthorizationHandler } from './handlers/approveDeviceAuthorization';
+export { denyDeviceAuthorizationHandler } from './handlers/denyDeviceAuthorization';
+export { deviceAuthorizationHandler } from './handlers/device';
 export { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
+export { AuthorizationPendingError, SlowDownError, ExpiredTokenError, InvalidRequestError, OAuthError, ServerError } from './errors.js';
 
 export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from './router.js';
 export { requireBearerAuth } from './middleware/bearerAuth.js';
-export { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-utils.js';
-
-// Add the userId field to AuthInfo and return it in verifyAccessToken
-// and so we can access it after requireBearerAuth
-declare module './types.js' {
-    interface AuthInfo {
-        userId?: string;
-    }
-}
+export { checkResourceAllowed } from './resource-uri.js';
+export * from './schemas.js';

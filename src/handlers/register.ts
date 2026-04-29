@@ -1,49 +1,27 @@
 import express, { RequestHandler } from 'express';
-import { OAuthClientInformationFull, OAuthClientMetadataSchema } from '@modelcontextprotocol/sdk/shared/auth.js';
-import crypto from 'node:crypto';
+import { OAuthClientMetadataSchema } from '../schemas.js';
 import cors from 'cors';
-import { OAuthRegisteredClientsStore } from '../clients.js';
+import { OAuthServer } from '../OAuthServer.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
-import { InvalidClientMetadataError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
+import { InvalidClientMetadataError, ServerError, TooManyRequestsError, OAuthError, UnsupportedGrantTypeError } from '../errors.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
 
 export type ClientRegistrationHandlerOptions = {
     /**
-     * A store used to save information about dynamically registered OAuth clients.
+     * OAuth provider used for dynamic client registration.
      */
-    clientsStore: OAuthRegisteredClientsStore;
-
-    /**
-     * The number of seconds after which to expire issued client secrets, or 0 to prevent expiration of client secrets (not recommended).
-     *
-     * If not set, defaults to 30 days.
-     */
-    clientSecretExpirySeconds?: number;
-
+    provider: OAuthServer;
     /**
      * Rate limiting configuration for the client registration endpoint.
      * Set to false to disable rate limiting for this endpoint.
      * Registration endpoints are particularly sensitive to abuse and should be rate limited.
      */
     rateLimit?: Partial<RateLimitOptions> | false;
-
-    /**
-     * Whether to generate a client ID before calling the client registration endpoint.
-     *
-     * If not set, defaults to true.
-     */
-    clientIdGeneration?: boolean;
 };
 
-const DEFAULT_CLIENT_SECRET_EXPIRY_SECONDS = 30 * 24 * 60 * 60; // 30 days
-
-export function clientRegistrationHandler({
-    clientsStore,
-    clientSecretExpirySeconds = DEFAULT_CLIENT_SECRET_EXPIRY_SECONDS,
-    rateLimit: rateLimitConfig,
-    clientIdGeneration = true,
-}: ClientRegistrationHandlerOptions): RequestHandler {
-    if (!clientsStore.registerClient) {
+export function clientRegistrationHandler({ provider, rateLimit: rateLimitConfig }: ClientRegistrationHandlerOptions): RequestHandler {
+    if (!provider.registerClient) {
         throw new Error('Client registration store does not support registering clients');
     }
 
@@ -79,30 +57,7 @@ export function clientRegistrationHandler({
                 throw new InvalidClientMetadataError(parseResult.error.message);
             }
 
-            const clientMetadata = parseResult.data;
-            const isPublicClient = clientMetadata.token_endpoint_auth_method === 'none';
-
-            // Generate client credentials
-            const clientSecret = isPublicClient ? undefined : crypto.randomBytes(32).toString('hex');
-            const clientIdIssuedAt = Math.floor(Date.now() / 1000);
-
-            // Calculate client secret expiry time
-            const clientsDoExpire = clientSecretExpirySeconds > 0;
-            const secretExpiryTime = clientsDoExpire ? clientIdIssuedAt + clientSecretExpirySeconds : 0;
-            const clientSecretExpiresAt = isPublicClient ? undefined : secretExpiryTime;
-
-            let clientInfo: Omit<OAuthClientInformationFull, 'client_id'> & { client_id?: string } = {
-                ...clientMetadata,
-                client_secret: clientSecret,
-                client_secret_expires_at: clientSecretExpiresAt,
-            };
-
-            if (clientIdGeneration) {
-                clientInfo.client_id = crypto.randomUUID();
-                clientInfo.client_id_issued_at = clientIdIssuedAt;
-            }
-
-            clientInfo = await clientsStore.registerClient!(clientInfo);
+            const clientInfo = await provider.registerClient!(parseResult.data);
             res.status(201).json(clientInfo);
         } catch (error) {
             if (error instanceof OAuthError) {

@@ -1,69 +1,75 @@
-import { OAuthServer } from '../OAuthServer.js';
+import * as z from 'zod/v4';
 import express, { RequestHandler } from 'express';
+import { OAuthServer } from '../OAuthServer.js';
 import cors from 'cors';
 import { authenticateClient } from '../middleware/clientAuth.js';
-import { OAuthTokenRevocationRequestSchema } from '../schemas.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
-import { InvalidRequestError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
+import { InvalidRequestError, ServerError, TooManyRequestsError, OAuthError, UnsupportedGrantTypeError } from '../errors.js';
 
-export type RevocationHandlerOptions = {
+export type DeviceAuthorizationHandlerOptions = {
     provider: OAuthServer;
     /**
-     * Rate limiting configuration for the token revocation endpoint.
-     * Set to false to disable rate limiting for this endpoint.
+     * Rate limiting for the device authorization endpoint.
+     * Set to false to disable.
      */
     rateLimit?: Partial<RateLimitOptions> | false;
 };
 
-export function revocationHandler({ provider, rateLimit: rateLimitConfig }: RevocationHandlerOptions): RequestHandler {
-    if (!provider.revokeToken) {
-        throw new Error('Auth provider does not support revoking tokens');
+const DeviceAuthorizationRequestSchema = z.object({
+    scope: z.string().optional(),
+    resource: z.string().url().optional(),
+});
+
+export function deviceAuthorizationHandler({ provider, rateLimit: rateLimitConfig }: DeviceAuthorizationHandlerOptions): RequestHandler {
+    if (!provider.requestDeviceAuthorization) {
+        throw new UnsupportedGrantTypeError('Device authorization is not supported by this authorization server');
     }
 
-    // Nested router so we can configure middleware and restrict HTTP method
     const router = express.Router();
 
-    // Configure CORS to allow any origin, to make accessible to web-based MCP clients
     router.use(cors());
-
     router.use(allowedMethods(['POST']));
     router.use(express.urlencoded({ extended: false }));
 
-    // Apply rate limiting unless explicitly disabled
     if (rateLimitConfig !== false) {
         router.use(
             rateLimit({
-                windowMs: 15 * 60 * 1000, // 15 minutes
-                max: 50, // 50 requests per windowMs
+                windowMs: 15 * 60 * 1000,
+                max: 50,
                 standardHeaders: true,
                 legacyHeaders: false,
-                message: new TooManyRequestsError('You have exceeded the rate limit for token revocation requests').toResponseObject(),
+                message: new TooManyRequestsError('You have exceeded the rate limit for device authorization requests').toResponseObject(),
                 ...rateLimitConfig,
             }),
         );
     }
 
-    // Authenticate and extract client details
     router.use(authenticateClient({ clientsStore: provider }));
 
     router.post('/', async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
 
         try {
-            const parseResult = OAuthTokenRevocationRequestSchema.safeParse(req.body);
+            const parseResult = DeviceAuthorizationRequestSchema.safeParse(req.body);
             if (!parseResult.success) {
                 throw new InvalidRequestError(parseResult.error.message);
             }
 
             const client = req.client;
             if (!client) {
-                // This should never happen
                 throw new ServerError('Internal Server Error');
             }
 
-            await provider.revokeToken!(client, parseResult.data);
-            res.status(200).json({});
+            const { scope, resource } = parseResult.data;
+            const scopes = scope?.split(/\s+/).filter(Boolean);
+
+            const body = await provider.requestDeviceAuthorization!(client, {
+                scopes: scopes?.length ? scopes : undefined,
+                resource: resource ? new URL(resource) : undefined,
+            });
+
+            res.status(200).json(body);
         } catch (error) {
             if (error instanceof OAuthError) {
                 const status = error instanceof ServerError ? 500 : 400;

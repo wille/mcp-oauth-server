@@ -1,35 +1,29 @@
 import { clientRegistrationHandler, ClientRegistrationHandlerOptions } from '../../handlers/register.js';
-import { OAuthRegisteredClientsStore } from '../../clients.js';
+import { OAuthServer } from '../../OAuthServer.js';
 import { OAuthClientInformationFull, OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
 import express from 'express';
 import supertest from 'supertest';
 import { MockInstance } from 'vitest';
 
 describe('Client Registration Handler', () => {
-    // Mock client store with registration support
-    const mockClientStoreWithRegistration: OAuthRegisteredClientsStore = {
-        async getClient(_clientId: string): Promise<OAuthClientInformationFull | undefined> {
-            return undefined;
-        },
-
+    // Mock provider with registration support
+    const mockProviderWithRegistration = {
+        grantTypes: ['authorization_code', 'refresh_token'],
         async registerClient(client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> {
             // Return the client info as-is in the mock
             return client;
         },
-    };
+    } as OAuthServer;
 
-    // Mock client store without registration support
-    const mockClientStoreWithoutRegistration: OAuthRegisteredClientsStore = {
-        async getClient(_clientId: string): Promise<OAuthClientInformationFull | undefined> {
-            return undefined;
-        },
-        // No registerClient method
-    };
+    // Mock provider without registration support (handler checks registerClient at runtime)
+    const mockProviderWithoutRegistration = {
+        grantTypes: ['authorization_code', 'refresh_token'],
+    } as OAuthServer;
 
     describe('Handler creation', () => {
         it('throws error if client store does not support registration', () => {
             const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithoutRegistration,
+                provider: mockProviderWithoutRegistration,
             };
 
             expect(() => clientRegistrationHandler(options)).toThrow('does not support registering clients');
@@ -37,7 +31,7 @@ describe('Client Registration Handler', () => {
 
         it('creates handler if client store supports registration', () => {
             const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithRegistration,
+                provider: mockProviderWithRegistration,
             };
 
             expect(() => clientRegistrationHandler(options)).not.toThrow();
@@ -52,14 +46,13 @@ describe('Client Registration Handler', () => {
             // Setup express app with registration handler
             app = express();
             const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithRegistration,
-                clientSecretExpirySeconds: 86400, // 1 day for testing
+                provider: mockProviderWithRegistration,
             };
 
             app.use('/register', clientRegistrationHandler(options));
 
             // Spy on the registerClient method
-            spyRegisterClient = vi.spyOn(mockClientStoreWithRegistration, 'registerClient');
+            spyRegisterClient = vi.spyOn(mockProviderWithRegistration, 'registerClient');
         });
 
         afterEach(() => {
@@ -115,11 +108,7 @@ describe('Client Registration Handler', () => {
 
             expect(response.status).toBe(201);
 
-            // Verify the generated client information
-            expect(response.body.client_id).toBeDefined();
-            expect(response.body.client_secret).toBeDefined();
-            expect(response.body.client_id_issued_at).toBeDefined();
-            expect(response.body.client_secret_expires_at).toBeDefined();
+            // Verify the returned client information from clientsStore.registerClient
             expect(response.body.redirect_uris).toEqual(['https://example.com/callback']);
 
             // Verify client was registered
@@ -149,8 +138,8 @@ describe('Client Registration Handler', () => {
             const publicResponse = await supertest(app).post('/register').send(publicClientMetadata);
 
             expect(publicResponse.status).toBe(201);
-            expect(publicResponse.body.client_secret).toBeDefined();
-            expect(publicResponse.body.client_secret_expires_at).toBeDefined();
+            expect(publicResponse.body.client_secret).toBeUndefined();
+            expect(publicResponse.body.client_secret_expires_at).toBeUndefined();
 
             // Test for non-public client (token_endpoint_auth_method is 'none')
             const nonPublicClientMetadata: OAuthClientMetadata = {
@@ -165,56 +154,11 @@ describe('Client Registration Handler', () => {
             expect(nonPublicResponse.body.client_secret_expires_at).toBeUndefined();
         });
 
-        it('sets expiry based on clientSecretExpirySeconds', async () => {
-            // Create handler with custom expiry time
-            const customApp = express();
-            const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithRegistration,
-                clientSecretExpirySeconds: 3600, // 1 hour
-            };
-
-            customApp.use('/register', clientRegistrationHandler(options));
-
-            const response = await supertest(customApp)
-                .post('/register')
-                .send({
-                    redirect_uris: ['https://example.com/callback'],
-                });
-
-            expect(response.status).toBe(201);
-
-            // Verify the expiration time (~1 hour from now)
-            const issuedAt = response.body.client_id_issued_at;
-            const expiresAt = response.body.client_secret_expires_at;
-            expect(expiresAt - issuedAt).toBe(3600);
-        });
-
-        it('sets no expiry when clientSecretExpirySeconds=0', async () => {
-            // Create handler with no expiry
-            const customApp = express();
-            const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithRegistration,
-                clientSecretExpirySeconds: 0, // No expiry
-            };
-
-            customApp.use('/register', clientRegistrationHandler(options));
-
-            const response = await supertest(customApp)
-                .post('/register')
-                .send({
-                    redirect_uris: ['https://example.com/callback'],
-                });
-
-            expect(response.status).toBe(201);
-            expect(response.body.client_secret_expires_at).toBe(0);
-        });
-
         it('sets no client_id when clientIdGeneration=false', async () => {
             // Create handler with no expiry
             const customApp = express();
             const options: ClientRegistrationHandlerOptions = {
-                clientsStore: mockClientStoreWithRegistration,
-                clientIdGeneration: false,
+                provider: mockProviderWithRegistration,
             };
 
             customApp.use('/register', clientRegistrationHandler(options));

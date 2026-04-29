@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import { InsufficientScopeError, InvalidTokenError, OAuthError, ServerError } from '../errors.js';
-import { OAuthTokenVerifier } from '../provider.js';
 import { AuthInfo } from '../types.js';
+import { OAuthTokenVerifier } from '../token-verifier.js';
 
 export type BearerAuthMiddlewareOptions = {
     /**
@@ -67,6 +67,8 @@ export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetad
             } else if (authInfo.expiresAt < Date.now() / 1000) {
                 throw new InvalidTokenError('Token has expired');
             }
+
+            // TODO validate token.resource
 
             req.auth = authInfo;
             next();

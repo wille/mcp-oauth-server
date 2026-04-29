@@ -1,29 +1,47 @@
-import { AuthorizationParams, OAuthServerProvider } from './provider.js';
+import { AuthorizationParams } from './types.js';
 import { OAuthRegisteredClientsStore } from './clients.js';
-import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
+import {
+    OAuthClientInformationFull,
+    OAuthClientMetadata,
+    OAuthClientMetadataSchema,
+    OAuthTokenRevocationRequest,
+    OAuthTokens,
+} from './schemas.js';
 import { Response } from 'express';
 import { AuthInfo } from './types.js';
-import { mcpAuthRouter } from './router.js';
-import { checkResourceAllowed, resourceUrlFromServerUrl } from '@modelcontextprotocol/sdk/shared/auth-utils.js';
+import { checkResourceAllowed, resourceUrlFromServerUrl } from './resource-uri.js';
 import {
     CustomOAuthError,
+    AccessDeniedError,
+    AuthorizationPendingError,
+    ExpiredTokenError,
     InvalidGrantError,
     InvalidRequestError,
     InvalidScopeError,
     InvalidTokenError,
+    SlowDownError,
+    UnauthorizedClientError,
     UnsupportedGrantTypeError,
-    UnsupportedResponseTypeError,
     InvalidTargetError,
     ServerError,
 } from './errors.js';
 import crypto from 'node:crypto';
 import debug from 'debug';
-import { AccessToken, RefreshToken } from './types';
+import { AccessToken, DeviceAuthorization, DeviceAuthorizationEndpointResponse, RefreshToken } from './types';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceCode, generateDeviceUserCode, normalizeDeviceUserCode } from './deviceFlow';
 import { OAuthServerModel } from './OAuthServerModel';
 import { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
 import { validateChallenge } from './pkce';
 
 const log = debug('oauth:OAuthServer');
+export const SUPPORTED_GRANT_TYPES = [
+    'authorization_code',
+    'refresh_token',
+    'client_credentials',
+    DEVICE_AUTHORIZATION_GRANT_TYPE,
+] as const;
+export type OAuthGrantType = (typeof SUPPORTED_GRANT_TYPES)[number];
+export const DEFAULT_GRANT_TYPES: OAuthGrantType[] = ['authorization_code', 'refresh_token'];
 
 type ErrorHandler = (
     step:
@@ -31,11 +49,15 @@ type ErrorHandler = (
         | 'registerClient'
         | 'authorize'
         | 'authenticate'
-        | 'challengeForAuthorizationCode'
         | 'exchangeAuthorizationCode'
         | 'exchangeRefreshToken'
+        | 'exchangeClientCredentials'
         | 'verifyAccessToken'
-        | 'revokeToken',
+        | 'revokeToken'
+        | 'requestDeviceAuthorization'
+        | 'exchangeDeviceCode'
+        | 'approveDeviceAuthorization'
+        | 'denyDeviceAuthorization',
     error: Error,
     params?: any,
 ) => void;
@@ -107,9 +129,8 @@ export interface OAuthServerOptions {
     authorizationCodeLifetime?: number;
 
     /**
-     * The MCP server URL
-     *
-     * If set, the RFC 8707 resource indicator will be validated against this URL.
+     * The URL of the protected resource (RS) whose metadata we advertise.
+     * If not provided, falls back to `baseUrl` and then to `issuerUrl` (AS=RS).
      */
     resourceServerUrl?: URL;
 
@@ -124,16 +145,43 @@ export interface OAuthServerOptions {
     modifyAuthorizationRedirectUrl?: (url: URL, client: OAuthClientInformationFull, params: AuthorizationParams) => Promise<void> | void;
 
     /**
-     * The mcpAuthRouter will swallow errors thrown in a OAuthServerProvider methods.
+     * The auth router may swallow errors thrown in OAuthServer methods.
      */
     errorHandler?: ErrorHandler;
+
+    /**
+     * RFC 8628: URL where the user enters the `user_code` (device flow).
+     * When set, device authorization endpoints are enabled and the model must implement device persistence methods.
+     */
+    deviceAuthorizationUrl?: URL;
+
+    /**
+     * Lifetime of the device code in seconds (RFC 8628 `expires_in`).
+     * @default 900 (15 minutes)
+     */
+    deviceAuthorizationLifetime?: number;
+
+    /**
+     * Minimum interval in seconds between token polls while authorization is pending (RFC 8628 `interval`).
+     * @default 5
+     */
+    devicePollIntervalSeconds?: number;
+    /**
+     * Enabled OAuth grant types.
+     * @default ['authorization_code', 'refresh_token']
+     */
+    grantTypes?: OAuthGrantType[];
+    /**
+     * Enable RFC 7591 dynamic client registration (`/register`).
+     * @default true
+     */
+    dynamicClientRegistration?: boolean;
 }
 
 /**
- * The OAuth Server provider to be used with {@link mcpAuthRouter} from [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
- * @implements OAuthServerProvider
+ * The OAuth Server provider to be used with `mcpAuthRouter` from [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
  */
-export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
+export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsStore {
     model: OAuthServerModel;
     authorizationUrl: URL;
 
@@ -147,6 +195,12 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
     resourceServerUrl?: URL;
     modifyAuthorizationRedirectUrl?: OAuthServerOptions['modifyAuthorizationRedirectUrl'];
     errorHandler: ErrorHandler;
+    grantTypes: OAuthGrantType[];
+    dynamicClientRegistration: boolean;
+
+    deviceAuthorizationUrl?: URL;
+    deviceAuthorizationLifetime: number;
+    devicePollIntervalSeconds: number;
 
     constructor(options: OAuthServerOptions) {
         this.model = options.model || new MemoryOAuthServerModel();
@@ -160,20 +214,56 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         this.resourceServerUrl = options.resourceServerUrl ? resourceUrlFromServerUrl(options.resourceServerUrl) : undefined;
         this.modifyAuthorizationRedirectUrl = options.modifyAuthorizationRedirectUrl;
         this.errorHandler = options.errorHandler || defaultErrorHandler;
+        this.deviceAuthorizationUrl = options.deviceAuthorizationUrl;
+        this.deviceAuthorizationLifetime = options.deviceAuthorizationLifetime ?? 900;
+        this.devicePollIntervalSeconds = options.devicePollIntervalSeconds ?? 5;
+        this.grantTypes = options.grantTypes ?? DEFAULT_GRANT_TYPES;
+        this.dynamicClientRegistration = options.dynamicClientRegistration ?? true;
+        this.validateGrantTypesAndModelCapabilities();
     }
 
-    // Disable pkce validation in the mcp sdk as we do our validate challenges here
-    readonly skipLocalPkceValidation = true;
+    private validateGrantTypesAndModelCapabilities(): void {
+        const unsupportedGrant = this.grantTypes.find((grantType) => !SUPPORTED_GRANT_TYPES.includes(grantType));
+        if (unsupportedGrant) {
+            throw new Error(`Unsupported grant type in OAuthServer options: ${unsupportedGrant}`);
+        }
 
-    get clientsStore(): OAuthRegisteredClientsStore {
-        return {
-            // If model.registerClient is not implemented, dynamic client registration is unsupported.
-            registerClient: this.model.registerClient ? this.registerClient.bind(this) : undefined,
-            getClient: this.getClient.bind(this),
-        };
+        const m = this.model;
+        if (this.grantTypes.includes('authorization_code')) {
+            if (!this.authorizationUrl) {
+                throw new Error('authorization_code grant requires authorizationUrl');
+            }
+            if (!m.saveAuthorizationCode || !m.getAuthorizationCode || !m.revokeAuthorizationCode) {
+                throw new Error(
+                    'authorization_code grant requires OAuthServerModel methods: saveAuthorizationCode, getAuthorizationCode, revokeAuthorizationCode',
+                );
+            }
+        }
+
+        if (this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE)) {
+            if (!this.deviceAuthorizationUrl) {
+                throw new Error('device_code grant requires deviceAuthorizationUrl');
+            }
+            if (
+                !m.saveDeviceAuthorization ||
+                !m.getDeviceAuthorizationByDeviceCode ||
+                !m.getDeviceAuthorizationByUserCode ||
+                !m.deleteDeviceAuthorization
+            ) {
+                throw new Error(
+                    'device_code grant requires OAuthServerModel device methods: saveDeviceAuthorization, getDeviceAuthorizationByDeviceCode, getDeviceAuthorizationByUserCode, deleteDeviceAuthorization',
+                );
+            }
+        }
+
+        if (this.dynamicClientRegistration) {
+            if (!this.model.registerClient) {
+                throw new Error('dynamic client registration is not supported by this authorization server');
+            }
+        }
     }
 
-    private async getClient(clientId: string) {
+    async getClient(clientId: string) {
         try {
             return await this.model.getClient!(clientId);
         } catch (error) {
@@ -182,26 +272,36 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         }
     }
 
-    private async registerClient(client: OAuthClientInformationFull) {
+    async registerClient(clientMetadata: OAuthClientMetadata) {
         try {
-            // if AuthRouterOptions.clientRegistrationOptions.clientIdGeneration is explicitly set to false,
-            // clientMetadata will not contain a client_id or client_secret
-            client.client_id ||= crypto.randomUUID();
-            client.client_id_issued_at ||= Math.floor(Date.now() / 1000);
-
-            // TODO
-            client.client_secret_expires_at ||= Math.floor(Date.now() / 1000) + this.clientSecretLifetime;
-
-            // Force the client to announce the grant types it supports
-            if (
-                !client.grant_types?.length ||
-                !client.grant_types.every((grant) => grant === 'authorization_code' || grant === 'refresh_token')
-            ) {
-                throw new UnsupportedGrantTypeError('Unsupported grant_type');
+            if (!this.model.registerClient) {
+                throw new UnsupportedGrantTypeError('dynamic client registration is not supported by this authorization server');
             }
 
-            if (!client.response_types?.length || client.response_types[0] !== 'code') {
-                throw new UnsupportedResponseTypeError('Unsupported response_type');
+            const isPublicClient = clientMetadata.token_endpoint_auth_method === 'none';
+
+            // Generate client credentials
+            const clientSecret = isPublicClient ? undefined : crypto.randomBytes(32).toString('hex');
+            const clientIdIssuedAt = Math.floor(Date.now() / 1000);
+
+            // Calculate client secret expiry time
+            const clientsDoExpire = this.clientSecretLifetime > 0;
+            const secretExpiryTime = clientsDoExpire ? clientIdIssuedAt + this.clientSecretLifetime : 0;
+            const clientSecretExpiresAt = isPublicClient ? undefined : secretExpiryTime;
+
+            // If omitted, the default behavior is that the client will use only the "authorization_code" Grant Type.
+            clientMetadata.grant_types ||= ['authorization_code'];
+
+            const client: OAuthClientInformationFull = {
+                ...clientMetadata,
+                client_id: crypto.randomUUID(),
+                client_id_issued_at: Math.floor(Date.now() / 1000),
+                client_secret: clientSecret,
+                client_secret_expires_at: clientSecretExpiresAt,
+            };
+
+            if (!client.grant_types?.length || !client.grant_types.every((grant) => this.grantTypes.includes(grant as OAuthGrantType))) {
+                throw new UnsupportedGrantTypeError('Unsupported grant_type: ' + client.grant_types?.join(', '));
             }
 
             if (
@@ -214,7 +314,7 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
 
             return await this.model.registerClient!(client);
         } catch (error) {
-            this.errorHandler('registerClient', error, { client });
+            this.errorHandler('registerClient', error, { clientMetadata });
             throw error;
         }
     }
@@ -222,6 +322,9 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
     // Begins the authorization flow. Redirect to the consent screen.
     async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
         try {
+            if (!this.grantTypes.includes('authorization_code')) {
+                throw new UnsupportedGrantTypeError('authorization_code grant is not supported');
+            }
             params.scopes = this.validateScope(params.scopes);
 
             this.validateResource(params.resource);
@@ -255,6 +358,9 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
     // Finishes the authorization flow. Returns the authorization code to the client.
     async authenticate(client: OAuthClientInformationFull, params: AuthorizationParams, userId: string, res: Response) {
         try {
+            if (!this.grantTypes.includes('authorization_code')) {
+                throw new UnsupportedGrantTypeError('authorization_code grant is not supported');
+            }
             params.scopes = this.validateScope(params.scopes);
             this.validateResource(params.resource);
 
@@ -271,7 +377,7 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
                 searchParams.set('state', params.state);
             }
 
-            await this.model.saveAuthorizationCode(
+            await this.model.saveAuthorizationCode!(
                 {
                     authorizationCode,
                     clientId: client.client_id,
@@ -296,10 +402,6 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         }
     }
 
-    async challengeForAuthorizationCode(client: OAuthClientInformationFull, authorizationCode: string): Promise<string> {
-        throw new Error('challengeForAuthorizationCode is not implemented');
-    }
-
     async exchangeAuthorizationCode(
         client: OAuthClientInformationFull,
         authorizationCode: string,
@@ -308,7 +410,14 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         resource?: URL,
     ): Promise<OAuthTokens> {
         try {
-            const codeData = await this.model.getAuthorizationCode(authorizationCode);
+            if (!this.grantTypes.includes('authorization_code')) {
+                throw new UnsupportedGrantTypeError('authorization_code grant is not supported');
+            }
+            if (!client.grant_types?.includes('authorization_code')) {
+                throw new UnauthorizedClientError('Client is not authorized to use authorization_code grant');
+            }
+
+            const codeData = await this.model.getAuthorizationCode!(authorizationCode);
             if (!codeData) {
                 throw new InvalidGrantError('Invalid authorization code');
             }
@@ -389,7 +498,7 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
                 resource,
             });
 
-            await this.model.revokeAuthorizationCode(authorizationCode);
+            await this.model.revokeAuthorizationCode!(authorizationCode);
 
             return {
                 access_token: token,
@@ -418,7 +527,10 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         resource?: URL,
     ): Promise<OAuthTokens> {
         try {
-            const refreshTokenData = await this.model.getRefreshToken(refreshToken);
+            if (!this.grantTypes.includes('refresh_token')) {
+                throw new UnsupportedGrantTypeError('refresh_token grant is not supported');
+            }
+            const refreshTokenData = await this.model.getRefreshToken!(refreshToken);
             if (!refreshTokenData) {
                 throw new InvalidGrantError('Invalid refresh token');
             }
@@ -495,6 +607,43 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
         }
     }
 
+    async exchangeClientCredentials(client: OAuthClientInformationFull, scopes?: string[], resource?: URL): Promise<OAuthTokens> {
+        try {
+            if (!this.grantTypes.includes('client_credentials')) {
+                throw new UnsupportedGrantTypeError('client_credentials grant is not supported');
+            }
+            if (!client.grant_types?.includes('client_credentials')) {
+                throw new UnauthorizedClientError('Client is not authorized to use client_credentials grant');
+            }
+
+            const validatedScopes = this.validateScope(scopes);
+            this.validateResource(resource);
+
+            const accessToken: AccessToken = {
+                token: this.generateToken(),
+                clientId: client.client_id,
+                scopes: validatedScopes || [],
+                expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
+                resource: resource?.href,
+            };
+            await this.model.saveAccessToken(accessToken, client);
+
+            return {
+                access_token: accessToken.token,
+                token_type: 'bearer',
+                expires_in: this.accessTokenLifetime,
+                scope: (validatedScopes || []).join(' '),
+            };
+        } catch (error) {
+            this.errorHandler('exchangeClientCredentials', error, {
+                client,
+                scopes,
+                resource,
+            });
+            throw error;
+        }
+    }
+
     async verifyAccessToken(token: string): Promise<AuthInfo> {
         try {
             const tokenData = await this.model.getAccessToken(token);
@@ -547,6 +696,223 @@ export class OAuthServer implements OAuthServerProvider, OAuthServerOptions {
             }
         } catch (error) {
             this.errorHandler('revokeToken', error, { client, request });
+            throw error;
+        }
+    }
+
+    async requestDeviceAuthorization(
+        client: OAuthClientInformationFull,
+        params: { scopes?: string[]; resource?: URL },
+    ): Promise<DeviceAuthorizationEndpointResponse> {
+        try {
+            if (!this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) || !this.deviceAuthorizationUrl) {
+                throw new UnsupportedGrantTypeError('Device authorization is not supported');
+            }
+
+            const scopes = this.validateScope(params.scopes);
+            this.validateResource(params.resource);
+
+            if (!client.grant_types?.includes(DEVICE_AUTHORIZATION_GRANT_TYPE)) {
+                throw new UnauthorizedClientError('Client is not authorized to use the device authorization grant');
+            }
+
+            let userCode: string | undefined;
+            for (let attempt = 0; attempt < 32; attempt++) {
+                const candidate = generateDeviceUserCode();
+                const normalized = normalizeDeviceUserCode(candidate);
+                const existing = await this.model.getDeviceAuthorizationByUserCode!(normalized);
+                if (!existing) {
+                    userCode = candidate;
+                    break;
+                }
+            }
+            if (!userCode) {
+                throw new ServerError('Could not allocate user code');
+            }
+
+            const deviceCode = generateDeviceCode();
+            const expiresAt = new Date(Date.now() + this.deviceAuthorizationLifetime * 1000);
+
+            const device: DeviceAuthorization = {
+                deviceCode,
+                userCode,
+                clientId: client.client_id,
+                scopes: scopes || [],
+                resource: params.resource?.href,
+                expiresAt,
+                pollIntervalSeconds: this.devicePollIntervalSeconds,
+                status: 'pending',
+            };
+
+            await this.model.saveDeviceAuthorization!(device);
+
+            const verificationUri = this.deviceAuthorizationUrl.href;
+            const verificationUriComplete = new URL(this.deviceAuthorizationUrl.href);
+            verificationUriComplete.searchParams.set('user_code', userCode);
+
+            log('requestDeviceAuthorization', { clientId: client.client_id, userCode, expiresAt });
+
+            return {
+                device_code: deviceCode,
+                user_code: userCode,
+                verification_uri: verificationUri,
+                verification_uri_complete: verificationUriComplete.href,
+                expires_in: this.deviceAuthorizationLifetime,
+                interval: this.devicePollIntervalSeconds,
+            };
+        } catch (error) {
+            this.errorHandler('requestDeviceAuthorization', error, { client, params });
+            throw error;
+        }
+    }
+
+    async exchangeDeviceCode(client: OAuthClientInformationFull, deviceCode: string): Promise<OAuthTokens> {
+        try {
+            if (!this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) || !this.deviceAuthorizationUrl) {
+                throw new UnsupportedGrantTypeError('Device authorization is not supported');
+            }
+
+            const device = await this.model.getDeviceAuthorizationByDeviceCode!(deviceCode);
+            if (!device) {
+                throw new InvalidGrantError('Invalid device code');
+            }
+
+            if (device.clientId !== client.client_id) {
+                throw new InvalidGrantError('Device code was not issued to this client');
+            }
+
+            if (device.expiresAt < new Date()) {
+                await this.model.deleteDeviceAuthorization!(deviceCode);
+                throw new ExpiredTokenError('The device code has expired');
+            }
+
+            if (device.status === 'denied') {
+                await this.model.deleteDeviceAuthorization!(deviceCode);
+                throw new AccessDeniedError('The end-user denied the authorization request');
+            }
+
+            if (device.status === 'approved') {
+                if (!device.userId) {
+                    throw new ServerError('Device authorization is missing user id');
+                }
+
+                const token = this.generateToken();
+                const tokenData: AccessToken = {
+                    token,
+                    clientId: client.client_id,
+                    userId: device.userId,
+                    scopes: device.scopes || [],
+                    expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
+                    resource: device.resource,
+                };
+                await this.model.saveAccessToken(tokenData, client);
+
+                const newRefreshTokenData: RefreshToken = {
+                    token: this.generateToken(),
+                    clientId: client.client_id,
+                    userId: device.userId,
+                    scopes: device.scopes || [],
+                    expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
+                    resource: device.resource,
+                };
+                await this.model.saveRefreshToken(newRefreshTokenData, client);
+
+                await this.model.deleteDeviceAuthorization!(deviceCode);
+
+                log('exchangeDeviceCode', { clientId: client.client_id, userId: device.userId });
+
+                return {
+                    access_token: token,
+                    refresh_token: newRefreshTokenData.token,
+                    token_type: 'bearer',
+                    expires_in: this.accessTokenLifetime,
+                    scope: (device.scopes || []).join(' '),
+                };
+            }
+
+            const now = Date.now();
+            if (device.lastPollResponseAtMs !== undefined && now - device.lastPollResponseAtMs < device.pollIntervalSeconds * 1000) {
+                device.pollIntervalSeconds += 5;
+                device.lastPollResponseAtMs = now;
+                await this.model.saveDeviceAuthorization!(device);
+                throw new SlowDownError('Polling too frequently');
+            }
+
+            device.lastPollResponseAtMs = now;
+            await this.model.saveDeviceAuthorization!(device);
+            throw new AuthorizationPendingError('The authorization request is still pending');
+        } catch (error) {
+            this.errorHandler('exchangeDeviceCode', error, { client, deviceCode });
+            throw error;
+        }
+    }
+
+    /**
+     * Mark a pending device authorization as approved after the resource owner authenticated
+     * (call from your verification UI when the user confirms).
+     */
+    async approveDeviceAuthorization(userCode: string, userId: string): Promise<void> {
+        try {
+            if (!this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) || !this.deviceAuthorizationUrl) {
+                throw new UnsupportedGrantTypeError('Device authorization is not supported');
+            }
+
+            const normalized = normalizeDeviceUserCode(userCode);
+            const device = await this.model.getDeviceAuthorizationByUserCode!(normalized);
+            if (!device) {
+                throw new InvalidGrantError('Unknown user code');
+            }
+
+            if (device.expiresAt < new Date()) {
+                await this.model.deleteDeviceAuthorization!(device.deviceCode);
+                throw new ExpiredTokenError('The device code has expired');
+            }
+
+            if (device.status !== 'pending') {
+                throw new InvalidRequestError('Device authorization is no longer pending');
+            }
+
+            device.status = 'approved';
+            device.userId = userId;
+            await this.model.saveDeviceAuthorization!(device);
+
+            log('approveDeviceAuthorization', { userId, clientId: device.clientId });
+        } catch (error) {
+            this.errorHandler('approveDeviceAuthorization', error, { userCode, userId });
+            throw error;
+        }
+    }
+
+    /**
+     * Mark a pending device authorization as denied (call from your verification UI when the user declines).
+     */
+    async denyDeviceAuthorization(userCode: string): Promise<void> {
+        try {
+            if (!this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) || !this.deviceAuthorizationUrl) {
+                throw new UnsupportedGrantTypeError('Device authorization is not supported');
+            }
+
+            const normalized = normalizeDeviceUserCode(userCode);
+            const device = await this.model.getDeviceAuthorizationByUserCode!(normalized);
+            if (!device) {
+                throw new InvalidGrantError('Unknown user code');
+            }
+
+            if (device.expiresAt < new Date()) {
+                await this.model.deleteDeviceAuthorization!(device.deviceCode);
+                throw new ExpiredTokenError('The device code has expired');
+            }
+
+            if (device.status !== 'pending') {
+                throw new InvalidRequestError('Device authorization is no longer pending');
+            }
+
+            device.status = 'denied';
+            await this.model.saveDeviceAuthorization!(device);
+
+            log('denyDeviceAuthorization', { clientId: device.clientId });
+        } catch (error) {
+            this.errorHandler('denyDeviceAuthorization', error, { userCode });
             throw error;
         }
     }

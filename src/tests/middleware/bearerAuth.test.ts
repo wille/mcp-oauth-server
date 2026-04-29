@@ -1,14 +1,14 @@
 import { Request, Response } from 'express';
 import { Mock } from 'vitest';
 import { requireBearerAuth } from '../../middleware/bearerAuth.js';
+import { OAuthServer } from '../../OAuthServer.js';
 import { AuthInfo } from '../../types.js';
 import { InsufficientScopeError, InvalidTokenError, CustomOAuthError, ServerError } from '../../errors.js';
-import { OAuthTokenVerifier } from '../../provider.js';
 import { createExpressResponseMock } from '../test-helpers.js';
 
 // Mock verifier
 const mockVerifyAccessToken = vi.fn();
-const mockVerifier: OAuthTokenVerifier = {
+const mockVerifier: Pick<OAuthServer, 'verifyAccessToken'> = {
     verifyAccessToken: mockVerifyAccessToken,
 };
 

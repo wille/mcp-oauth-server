@@ -1,4 +1,4 @@
-import { OAuthErrorResponse } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthErrorResponse } from './schemas.js';
 
 /**
  * Base class for all OAuth errors
@@ -90,6 +90,27 @@ export class InvalidScopeError extends OAuthError {
  */
 export class AccessDeniedError extends OAuthError {
     static errorCode = 'access_denied';
+}
+
+/**
+ * RFC 8628: authorization is pending; the client should poll the token endpoint again after `interval`.
+ */
+export class AuthorizationPendingError extends OAuthError {
+    static errorCode = 'authorization_pending';
+}
+
+/**
+ * RFC 8628: the client is polling too frequently; increase the polling interval.
+ */
+export class SlowDownError extends OAuthError {
+    static errorCode = 'slow_down';
+}
+
+/**
+ * RFC 8628: the device code has expired.
+ */
+export class ExpiredTokenError extends OAuthError {
+    static errorCode = 'expired_token';
 }
 
 /**
@@ -209,4 +230,7 @@ export const OAUTH_ERRORS = {
     [InvalidClientMetadataError.errorCode]: InvalidClientMetadataError,
     [InsufficientScopeError.errorCode]: InsufficientScopeError,
     [InvalidTargetError.errorCode]: InvalidTargetError,
+    [AuthorizationPendingError.errorCode]: AuthorizationPendingError,
+    [SlowDownError.errorCode]: SlowDownError,
+    [ExpiredTokenError.errorCode]: ExpiredTokenError,
 } as const;

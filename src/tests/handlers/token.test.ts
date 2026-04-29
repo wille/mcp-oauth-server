@@ -1,20 +1,12 @@
 import { tokenHandler, TokenHandlerOptions } from '../../handlers/token.js';
-import { OAuthServerProvider, AuthorizationParams } from '../../provider.js';
+import { OAuthServer } from '../../OAuthServer.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../../deviceFlow.js';
 import { OAuthRegisteredClientsStore } from '../../clients.js';
 import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
-import * as pkceChallenge from 'pkce-challenge';
 import { InvalidGrantError, InvalidTokenError } from '../../errors.js';
-import { AuthInfo } from '../../types.js';
-import { type Mock } from 'vitest';
-
-// Mock pkce-challenge
-vi.mock('pkce-challenge', () => ({
-    verifyChallenge: vi.fn().mockImplementation(async (verifier, challenge) => {
-        return verifier === 'valid_verifier' && challenge === 'mock_challenge';
-    }),
-}));
+import { AuthInfo, AuthorizationParams } from '../../types.js';
 
 const mockTokens = {
     access_token: 'mock_access_token',
@@ -34,6 +26,7 @@ describe('Token Handler', () => {
         client_id: 'valid-client',
         client_secret: 'valid-secret',
         redirect_uris: ['https://example.com/callback'],
+        grant_types: ['authorization_code', 'refresh_token', 'client_credentials', DEVICE_AUTHORIZATION_GRANT_TYPE],
     };
 
     // Mock client store
@@ -46,30 +39,28 @@ describe('Token Handler', () => {
         },
     };
 
-    // Mock provider
-    let mockProvider: OAuthServerProvider;
+    // Mock provider (partial implementation — cast for handler options typing)
+    let mockProvider: OAuthServer;
     let app: express.Express;
 
     beforeEach(() => {
         // Create fresh mocks for each test
         mockProvider = {
-            clientsStore: mockClientStore,
+            getClient: async (clientId: string) => Promise.resolve(mockClientStore.getClient(clientId)),
 
             async authorize(client: OAuthClientInformationFull, params: AuthorizationParams, res: Response): Promise<void> {
                 res.redirect('https://example.com/callback?code=mock_auth_code');
             },
 
-            async challengeForAuthorizationCode(client: OAuthClientInformationFull, authorizationCode: string): Promise<string> {
+            async exchangeAuthorizationCode(
+                client: OAuthClientInformationFull,
+                authorizationCode: string,
+                codeVerifier?: string,
+            ): Promise<OAuthTokens> {
                 if (authorizationCode === 'valid_code') {
-                    return 'mock_challenge';
-                } else if (authorizationCode === 'expired_code') {
-                    throw new InvalidGrantError('The authorization code has expired');
-                }
-                throw new InvalidGrantError('The authorization code is invalid');
-            },
-
-            async exchangeAuthorizationCode(client: OAuthClientInformationFull, authorizationCode: string): Promise<OAuthTokens> {
-                if (authorizationCode === 'valid_code') {
+                    if (codeVerifier !== undefined && codeVerifier !== 'valid_verifier') {
+                        throw new InvalidGrantError('code_verifier does not match the challenge');
+                    }
                     return mockTokens;
                 }
                 throw new InvalidGrantError('The authorization code is invalid or has expired');
@@ -93,6 +84,18 @@ describe('Token Handler', () => {
                 throw new InvalidGrantError('The refresh token is invalid or has expired');
             },
 
+            async exchangeClientCredentials(_client: OAuthClientInformationFull, scopes?: string[]): Promise<OAuthTokens> {
+                const response: OAuthTokens = {
+                    access_token: 'client_credentials_access_token',
+                    token_type: 'bearer',
+                    expires_in: 3600,
+                };
+                if (scopes) {
+                    response.scope = scopes.join(' ');
+                }
+                return response;
+            },
+
             async verifyAccessToken(token: string): Promise<AuthInfo> {
                 if (token === 'valid_token') {
                     return {
@@ -108,16 +111,23 @@ describe('Token Handler', () => {
             async revokeToken(_client: OAuthClientInformationFull, _request: OAuthTokenRevocationRequest): Promise<void> {
                 // Do nothing in mock
             },
-        };
 
-        // Mock PKCE verification
-        (pkceChallenge.verifyChallenge as Mock).mockImplementation(async (verifier: string, challenge: string) => {
-            return verifier === 'valid_verifier' && challenge === 'mock_challenge';
-        });
+            async exchangeDeviceCode(_client: OAuthClientInformationFull, deviceCode: string): Promise<OAuthTokens> {
+                if (deviceCode === 'valid_device') {
+                    return mockTokens;
+                }
+                throw new InvalidGrantError('Invalid device code');
+            },
+
+            grantTypes: ['authorization_code', 'refresh_token', 'client_credentials', DEVICE_AUTHORIZATION_GRANT_TYPE],
+            deviceAuthorizationUrl: new URL('https://example.com/device'),
+        } as OAuthServer;
 
         // Setup express app with token handler
         app = express();
-        const options: TokenHandlerOptions = { provider: mockProvider };
+        const options: TokenHandlerOptions = {
+            provider: mockProvider,
+        };
         app.use('/token', tokenHandler(options));
     });
 
@@ -157,6 +167,30 @@ describe('Token Handler', () => {
 
             expect(response.status).toBe(400);
             expect(response.body.error).toBe('unsupported_grant_type');
+        });
+
+        it('rejects grant types the client is not authorized for', async () => {
+            const noRefreshClient: OAuthClientInformationFull = {
+                ...validClient,
+                client_id: 'no-refresh-client',
+                grant_types: ['authorization_code'],
+            };
+            mockProvider.getClient = async (clientId: string) => {
+                if (clientId === 'no-refresh-client') {
+                    return noRefreshClient;
+                }
+                return undefined;
+            };
+
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'no-refresh-client',
+                client_secret: 'valid-secret',
+                grant_type: 'refresh_token',
+                refresh_token: 'valid_refresh_token',
+            });
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe('unauthorized_client');
         });
     });
 
@@ -212,10 +246,7 @@ describe('Token Handler', () => {
             expect(response.body.error).toBe('invalid_request');
         });
 
-        it('verifies code_verifier against challenge', async () => {
-            // Setup invalid verifier
-            (pkceChallenge.verifyChallenge as Mock).mockResolvedValueOnce(false);
-
+        it('rejects authorization code exchange when code_verifier does not match', async () => {
             const response = await supertest(app).post('/token').type('form').send({
                 client_id: 'valid-client',
                 client_secret: 'valid-secret',
@@ -261,7 +292,7 @@ describe('Token Handler', () => {
             expect(mockExchangeCode).toHaveBeenCalledWith(
                 validClient,
                 'valid_code',
-                undefined, // code_verifier is undefined after PKCE validation
+                'valid_verifier',
                 undefined, // redirect_uri
                 new URL('https://api.example.com/resource'), // resource parameter
             );
@@ -271,8 +302,12 @@ describe('Token Handler', () => {
             mockProvider.exchangeAuthorizationCode = async (
                 client: OAuthClientInformationFull,
                 authorizationCode: string,
+                codeVerifier?: string,
             ): Promise<OAuthTokens> => {
                 if (authorizationCode === 'valid_code') {
+                    if (codeVerifier !== undefined && codeVerifier !== 'valid_verifier') {
+                        throw new InvalidGrantError('code_verifier does not match the challenge');
+                    }
                     return mockTokensWithIdToken;
                 }
                 throw new InvalidGrantError('The authorization code is invalid or has expired');
@@ -350,6 +385,64 @@ describe('Token Handler', () => {
 
             expect(response.status).toBe(200);
             expect(response.body.scope).toBe('profile email');
+        });
+    });
+
+    describe('Device code grant', () => {
+        it('requires device_code', async () => {
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: DEVICE_AUTHORIZATION_GRANT_TYPE,
+            });
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe('invalid_request');
+        });
+
+        it('returns tokens when exchangeDeviceCode succeeds', async () => {
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: DEVICE_AUTHORIZATION_GRANT_TYPE,
+                device_code: 'valid_device',
+            });
+
+            expect(response.status).toBe(200);
+            expect(response.body.access_token).toBe('mock_access_token');
+        });
+    });
+
+    describe('Client credentials grant', () => {
+        it('returns an access token for valid client credentials request', async () => {
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: 'client_credentials',
+            });
+
+            expect(response.status).toBe(200);
+            expect(response.body.access_token).toBe('client_credentials_access_token');
+            expect(response.body.token_type).toBe('bearer');
+            expect(response.body.refresh_token).toBeUndefined();
+        });
+
+        it('passes requested scope and resource to provider', async () => {
+            const mockExchangeClientCredentials = vi.spyOn(mockProvider, 'exchangeClientCredentials');
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: 'client_credentials',
+                scope: 'profile email',
+                resource: 'https://api.example.com/resource',
+            });
+
+            expect(response.status).toBe(200);
+            expect(mockExchangeClientCredentials).toHaveBeenCalledWith(
+                validClient,
+                ['profile', 'email'],
+                new URL('https://api.example.com/resource'),
+            );
         });
     });
 

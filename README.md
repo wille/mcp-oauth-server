@@ -31,9 +31,12 @@ npm install mcp-oauth-server@latest --save-exact
 - **MCP Authorization Spec Compliant**: Fully compliant with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
     - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
     - Dynamic Client Registration [(RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591)
+    - Token Revocation [(RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
+    - Token Introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662)
     - Authorization Server Metadata [(RFC 8414)](https://datatracker.ietf.org/doc/html/rfc8414)
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
-- **SDK Integration**: Implements `OAuthServerProvider` from [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
+- **Grant Types**: Supports `authorization_code`, `refresh_token`, device authorization grant (RFC 8628), and `client_credentials`
+- **Feature Flags**: Toggle registration/revocation/client credentials support at server construction time
 - **Compatibility**: Supports MCP clients not fully compliant with the MCP Authorization Spec, such as clients that don't provide a `resource` indicator (RFC 8707) or any requested scopes
 - **Flexible**: Works with in-memory storage (for development) or custom storage backends (for production)
 
@@ -63,7 +66,7 @@ The example demonstrates:
 
 ### OAuthServer
 
-An OAuth 2.1 Server instance that implements the OAuthServerProvider to be used with `mcpAuthRouter` from the [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
+An OAuth 2.1 server instance used directly with `mcpAuthRouter`.
 
 ```ts
 import { OAuthServer } from 'mcp-oauth-server';
@@ -71,6 +74,7 @@ import { OAuthServer } from 'mcp-oauth-server';
 const oauthServer = new OAuthServer({
     authorizationUrl: new URL('http://localhost:3000/consent'),
     scopesSupported: ['mcp:tools'],
+    grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
 })
 ```
 
@@ -87,6 +91,10 @@ const oauthServer = new OAuthServer({
 - `strictResource`: (optional) Whether to validate the resource indicator in the authorization request. Default: `true`. Setting this to `false` will allow better compatibility with MCP clients that do not follow the spec and do not include a resource indicator in the request.
 - `modifyAuthorizationRedirectUrl`: (optional) A function to modify the authorization redirect URL. This can be used to add metadata to the authorization redirect URL, like the client name, client URI, or logo URI, which can then be displayed on your consent screen.
 - `errorHandler`: (optional) A function to handle errors. This can be used to log errors occuring in the OAuth flow.
+- `dynamicClientRegistration`: (optional) Enable RFC 7591 `/register`. Default: `true`. Throws at construction time if enabled and `model.registerClient` is not implemented.
+- `tokenRevocation`: (optional) Enable RFC 7009 `/revoke`. Default: `true`.
+- `grantTypes`: (optional) Enabled grant types. Default: `['authorization_code', 'refresh_token']`. Include `'client_credentials'` and/or `'urn:ietf:params:oauth:grant-type:device_code'` to enable those flows.
+- `verificationUri`: (optional) Enable device authorization flow endpoints/methods (RFC 8628).
 
 ### OAuthServerModel
 
@@ -136,7 +144,7 @@ export class PostgresModel implements OAuthServerModel {
 
 ### mcpAuthRouter
 
-Express middleware that sets up all OAuth 2.1 Authorization Server endpoints (authorization, token, registration, metadata, etc.).
+Express middleware that sets up OAuth Authorization Server endpoints (authorization, token, metadata, and optionally registration/revocation/introspection/device depending on `OAuthServer` settings and methods).
 
 ```ts
 import express from 'express';
@@ -151,6 +159,11 @@ app.use(mcpAuthRouter({
     scopesSupported: ['mcp:tools'],
 }));
 ```
+
+Feature-gated endpoints:
+- `/register` when `provider.dynamicClientRegistration === true`
+- `/revoke` when `tokenRevocation === true`
+- `/device` when device flow is enabled (`deviceAuthorizationUrl` configured)
 
 The router needs to be mounted at the root of your API. Control the base path of the OAuth server endpoints using the `baseUrl` option. 
 
@@ -213,17 +226,3 @@ After authentication, the request will have `req.auth` with:
 - `userId`: The user ID associated with the token
 - `token`: The access token used
 - `scopes`: The scopes granted to the token
-
-
-
-## Limitations
-
-> [!WARNING]
-> 
-> You currently cannot run the Authorization Server (`mcpAuthRouter`) on a path other than root `/` path. See [modelcontextprotocol/typescript-sdk#1095](https://github.com/modelcontextprotocol/typescript-sdk/pull/1095)
-> - There is no support for the [OAuth 2.1 client_credentials grant type](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-4.4.3), but this should not be a problem as most MCP clients use the `authorization_code` grant type. See [modelcontextprotocol/typescript-sdk#899](https://github.com/modelcontextprotocol/typescript-sdk/issues/899)
-
-
-> [!NOTE]
-> 
-> - **Separate Servers**: You can run the OAuth Server (Authorization Server) on a different server from the MCP Server (Resource Server) as long as they share the same underlying model/storage backend
