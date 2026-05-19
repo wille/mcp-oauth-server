@@ -201,16 +201,5 @@ describe('Client Registration Handler', () => {
                 expect(response.body[key]).toEqual(value);
             });
         });
-
-        it('includes CORS headers in response', async () => {
-            const response = await supertest(app)
-                .post('/register')
-                .set('Origin', 'https://example.com')
-                .send({
-                    redirect_uris: ['https://example.com/callback'],
-                });
-
-            expect(response.header['access-control-allow-origin']).toBe('*');
-        });
     });
 });

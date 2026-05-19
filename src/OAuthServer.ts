@@ -80,7 +80,7 @@ export interface OAuthServerOptions {
      * or a custom consent screen hosted on another frontend,
      * like your web application.
      */
-    authorizationUrl: URL;
+    authorizationUrl?: URL;
 
     /**
      * The scopes supported by this OAuth server.
@@ -130,7 +130,7 @@ export interface OAuthServerOptions {
 
     /**
      * The URL of the protected resource (RS) whose metadata we advertise.
-     * If not provided, falls back to `baseUrl` and then to `issuerUrl` (AS=RS).
+     * If not provided, the resource param will not be validated.
      */
     resourceServerUrl?: URL;
 
@@ -183,7 +183,7 @@ export interface OAuthServerOptions {
  */
 export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsStore {
     model: OAuthServerModel;
-    authorizationUrl: URL;
+    authorizationUrl?: URL;
 
     scopesSupported?: string[];
 
@@ -330,7 +330,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             this.validateResource(params.resource);
 
             // Start with required OAuth parameters
-            const url = new URL(this.authorizationUrl);
+            const url = new URL(this.authorizationUrl!);
 
             url.searchParams.set('client_id', client.client_id);
             url.searchParams.set('response_type', 'code');

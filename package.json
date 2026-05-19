@@ -23,7 +23,7 @@
     "format": "prettier --check ./src ./example",
     "build": "rollup -c rollup.config.js",
     "example:server": "DEBUG=oauth:* tsx --watch example/index.ts",
-    "example:client": "tsx --watch node_modules/@modelcontextprotocol/sdk/dist/cjs/examples/client/simpleOAuthClient.js"
+    "example:client": "tsx --watch node_modules/@modelcontextprotocol/sdk/dist/esm/examples/client/simpleOAuthClient.js"
   },
   "author": "wille",
   "repository": {
@@ -46,12 +46,11 @@
     "vitest": "^4.0.10"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.24.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": ">=4",
     "express-rate-limit": ">=7.5"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "debug": "^4.4.3",
     "pkce-challenge": "^5.0.1",
     "zod": "^4.1.13"

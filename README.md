@@ -4,21 +4,21 @@
 
 OAuth 2.1 Authorization Server implementation built to support the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) through [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk).
 
-Based on the MCP SDK's partial OAuth 2.1 Authorization Server implementation.
+Based on the MCP SDK’s partial OAuth 2.1 Authorization Server implementation.
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Requirements](#requirements)
 - [Features](#features)
+- [OAuth client credentials](#oauth-client-credentials-machine-to-machine)
+- [Device authorization (RFC 8628)](#device-authorization-rfc-8628)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
   - [OAuthServer](#oauthserver)
+  - [OAuthServerModel](#oauthservermodel)
   - [mcpAuthRouter](#mcpauthrouter)
   - [authenticateHandler](#authenticatehandler)
   - [requireBearerAuth](#requirebearerauth)
-- [Demo](#demo)
-- [Limitations](#limitations)
 
 ## Installation
 
@@ -28,45 +28,96 @@ npm install mcp-oauth-server@latest --save-exact
 
 ## Features
 
-- **MCP Authorization Spec Compliant**: Fully compliant with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
+- **MCP Authorization Spec compliant**: Aligns with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
     - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
     - Dynamic Client Registration [(RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591)
     - Token Revocation [(RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
-    - Token Introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662)
     - Authorization Server Metadata [(RFC 8414)](https://datatracker.ietf.org/doc/html/rfc8414)
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
-- **Grant Types**: Supports `authorization_code`, `refresh_token`, device authorization grant (RFC 8628), and `client_credentials`
-- **Feature Flags**: Toggle registration/revocation/client credentials support at server construction time
-- **Compatibility**: Supports MCP clients not fully compliant with the MCP Authorization Spec, such as clients that don't provide a `resource` indicator (RFC 8707) or any requested scopes
-- **Flexible**: Works with in-memory storage (for development) or custom storage backends (for production)
+- **Grant types**: Configurable via `grantTypes` — `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`)
+- **Compatibility**: Works with MCP clients that omit a `resource` indicator [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) or requested scopes when needed (`strictResource`)
+- **Flexible storage**: In-memory model for development (`MemoryOAuthServerModel`) or your own `OAuthServerModel` for production
+
+**Not supported:** Token introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662) — validate access tokens via `OAuthServer.verifyAccessToken` (and `requireBearerAuth`) instead.
+
+## OAuth client credentials (machine-to-machine)
+
+Use this grant when **no end user** is present (services, CI, daemons). MCP documents this as the **OAuth Client Credentials** extension (`io.modelcontextprotocol/oauth-client-credentials`). See the official guide: **[OAuth Client Credentials](https://modelcontextprotocol.io/extensions/auth/oauth-client-credentials)**.
+
+**Server**
+
+1. Include `'client_credentials'` in `grantTypes`.
+2. Clients registered for this flow must include `client_credentials` in `grant_types` (via dynamic registration or your model).
+
+```ts
+import { OAuthServer } from 'mcp-oauth-server';
+
+const oauthServer = new OAuthServer({
+    authorizationUrl: new URL('https://example.com/consent'),
+    scopesSupported: ['mcp:tools'],
+    grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
+});
+```
+
+**Client (conceptually)**
+
+`POST` to the token endpoint with `grant_type=client_credentials` and authenticate the client (for example `client_id` / `client_secret` per [RFC 6749 §4.4](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4)). MCP clients using `@modelcontextprotocol/client` can use `ClientCredentialsProvider` as described in the extension docs above.
+
+Tokens minted for this grant typically have **no `userId`** on `AuthInfo` — authorize by `clientId` and scopes where appropriate.
+
+## Device authorization (RFC 8628)
+
+Use the **device authorization grant** for clients that cannot easily run a browser redirect (CLIs, TVs, constrained devices).
+
+**Server**
+
+1. Set `deviceAuthorizationUrl` to the URL where the user enters or confirms the **user code** (your UX page).
+2. Add the device grant type to `grantTypes` (use the exported constant so you do not typo the URN):
+
+```ts
+import { OAuthServer, DEVICE_AUTHORIZATION_GRANT_TYPE } from 'mcp-oauth-server';
+
+const oauthServer = new OAuthServer({
+    authorizationUrl: new URL('https://example.com/consent'),
+    scopesSupported: ['mcp:tools'],
+    grantTypes: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+    deviceAuthorizationUrl: new URL('https://example.com/device'),
+});
+```
+
+3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`) — see `MemoryOAuthServerModel` for a reference.
+
+The auth router exposes **`POST /device`** (under your AS base path) when the device grant and `deviceAuthorizationUrl` are configured. Metadata lists `device_authorization_endpoint` accordingly.
+
+**Approving or denying a login**
+
+Wire **`approveDeviceAuthorizationHandler`** and **`denyDeviceAuthorizationHandler`** on routes you choose; they accept `user_code` (and resolve the authenticated user via `getUser`) so the user can approve or reject the device login out-of-band.
 
 ## Quick Start
 
-A complete working example of an MCP OAuth flow with a memory-backed OAuth 2.1 Authorization Server can be found in the [`./example`](example) folder.
+A working MCP OAuth example with a memory-backed authorization server lives in [`./example`](example).
 
-**Run the demo:**
+**Run the demo**
 
 1. Start the server:
+
    ```bash
    pnpm example:server
    ```
 
 2. In another terminal, authenticate with the server:
+
    ```bash
    pnpm example:client
    ```
 
-The example demonstrates:
-- Setting up an OAuth server with in-memory storage in front of a MCP server
-- Creating a consent screen
-- Handling authorization confirmation
-
+The example covers mounting the OAuth router, a simple consent screen, and confirming authorization.
 
 ## API Reference
 
 ### OAuthServer
 
-An OAuth 2.1 server instance used directly with `mcpAuthRouter`.
+OAuth 2.1 server instance passed to `mcpAuthRouter`.
 
 ```ts
 import { OAuthServer } from 'mcp-oauth-server';
@@ -75,154 +126,156 @@ const oauthServer = new OAuthServer({
     authorizationUrl: new URL('http://localhost:3000/consent'),
     scopesSupported: ['mcp:tools'],
     grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
-})
+});
 ```
 
-**Config options:**
+**Options**
 
-- `model`: (optional) The storage model to use for the OAuth server. Default: `MemoryOAuthServerModel` (in-memory, suitable for development). For production, implement your own `OAuthServerModel` to use a database.
-- `authorizationUrl`: (required) The URL to redirect the user to for authorization. This may be a consent screen hosted on the Authorization Server or a custom consent screen hosted on another frontend, like your web application.
-- `resourceServerUrl`: (optional) The URL of the MCP Server (Resource Server). If not provided, resource indicators will not be validated.
-- `scopesSupported`: (optional) Array of scopes supported by this OAuth server. If the client does not include any scopes in the request, the server will default to all the supported scopes. Some MCP clients do not follow the spec and do not include any scopes in the request.
-- `accessTokenLifetime`: (optional) The lifetime of the access token in seconds. Default: `3600` (1 hour)
-- `refreshTokenLifetime`: (optional) The lifetime of the refresh token in seconds. Default: `1209600` (2 weeks)
-- `clientSecretLifetime`: (optional) The number of seconds after which to expire issued client secrets, or `0` to prevent expiration of client secrets (not recommended). Default: `7776000` (3 months). Public clients (clients registered with `token_endpoint_auth_method = 'none'`) do not have a client secret and live forever.
-- `authorizationCodeLifetime`: (optional) The lifetime of the authorization code in seconds. Default: `300` (5 minutes)
-- `strictResource`: (optional) Whether to validate the resource indicator in the authorization request. Default: `true`. Setting this to `false` will allow better compatibility with MCP clients that do not follow the spec and do not include a resource indicator in the request.
-- `modifyAuthorizationRedirectUrl`: (optional) A function to modify the authorization redirect URL. This can be used to add metadata to the authorization redirect URL, like the client name, client URI, or logo URI, which can then be displayed on your consent screen.
-- `errorHandler`: (optional) A function to handle errors. This can be used to log errors occuring in the OAuth flow.
-- `dynamicClientRegistration`: (optional) Enable RFC 7591 `/register`. Default: `true`. Throws at construction time if enabled and `model.registerClient` is not implemented.
-- `tokenRevocation`: (optional) Enable RFC 7009 `/revoke`. Default: `true`.
-- `grantTypes`: (optional) Enabled grant types. Default: `['authorization_code', 'refresh_token']`. Include `'client_credentials'` and/or `'urn:ietf:params:oauth:grant-type:device_code'` to enable those flows.
-- `verificationUri`: (optional) Enable device authorization flow endpoints/methods (RFC 8628).
+- `model`: (optional) Storage backend. Default: `MemoryOAuthServerModel`.
+- `authorizationUrl`: (required) Redirect URL for interactive authorization (consent). Required when `authorization_code` is enabled.
+- `resourceServerUrl`: (optional) MCP resource server URL; used for resource validation and metadata when set.
+- `scopesSupported`: (optional) Supported scopes; if the client omits `scope`, the server may default to these supported scopes.
+- `accessTokenLifetime`: (optional) Access token lifetime in seconds. Default: `3600`.
+- `refreshTokenLifetime`: (optional) Refresh token lifetime in seconds. Default: `1209600` (14 days).
+- `clientSecretLifetime`: (optional) Client secret expiry in seconds, or `0` for no expiry. Default: `7776000` (90 days). Public clients (`token_endpoint_auth_method: 'none'`) have no secret.
+- `authorizationCodeLifetime`: (optional) Authorization code lifetime in seconds. Default: `300`.
+- `strictResource`: (optional) Validate the RFC 8707 `resource` parameter on authorize requests. Default: `true`.
+- `modifyAuthorizationRedirectUrl`: (optional) Mutate the consent redirect URL (e.g. add client display hints as query parameters).
+- `errorHandler`: (optional) Hook for logging or handling errors inside OAuth flows.
+- `dynamicClientRegistration`: (optional) Enable RFC 7591 `/register`. Default: `true`. Construction fails if enabled and `model.registerClient` is missing.
+- `grantTypes`: (optional) Enabled grants. Default: `['authorization_code', 'refresh_token']`. Add `'client_credentials'` and/or `DEVICE_AUTHORIZATION_GRANT_TYPE` as needed.
+- `deviceAuthorizationUrl`: (optional) Page URL where the user enters the user code (RFC 8628). Required together with the device grant on `grantTypes`.
+- `deviceAuthorizationLifetime`: (optional) Device code lifetime in seconds. Default: `900`.
+- `devicePollIntervalSeconds`: (optional) Minimum poll interval returned to clients while authorization is pending. Default: `5`.
 
 ### OAuthServerModel
 
-An interface for the storage model to use for the OAuth server. This is used to store the OAuth server's data, such as clients, tokens, and authorization codes.
+Storage interface for clients, codes, tokens, and (when enabled) device authorization records.
 
 ```ts
-import { OAuthServerModel } from 'mcp-oauth-server';
+import type { OAuthServerModel, AccessToken } from 'mcp-oauth-server';
 
 export class PostgresModel implements OAuthServerModel {
-    async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
-        const client = await this.db.query('SELECT * FROM clients WHERE client_id = $1', [clientId]);
-        return client;
-    }
-
-    async registerClient(client: OAuthClientInformationFull): Promise<OAuthClientInformationFull> {
-        // Modify or omit fields from the client metadata here if needed
-        return client;
-    }
-
-    async getAccessToken(token: string): Promise<AccessToken | undefined> {
-        const accessToken = await this.db.query('SELECT * FROM access_tokens WHERE token = $1', [token]);
-        return accessToken;
+    async getClient(clientId: string) {
+        return await this.db.loadClient(clientId);
     }
 
     async saveAccessToken(accessToken: AccessToken): Promise<void> {
-        await this.db.query('INSERT INTO access_tokens (token, client_id, expires_at, scopes, resource) VALUES ($1, $2, $3, $4, $5)', [accessToken.token, accessToken.client_id, accessToken.expires_at, accessToken.scopes, accessToken.resource]);
+        await this.db.saveAccessToken(accessToken);
     }
-    
-    /* ... */
+
+    async getAccessToken(token: string): Promise<AccessToken | undefined> {
+        return await this.db.getAccessToken(token);
+    }
+
+    // Implement the remaining methods required for your enabled grant types:
+    // authorization codes, refresh tokens, revocation, optional registration,
+    // and device authorization helpers when using the device grant.
 }
 ```
 
-**Config options:**
+**Methods**
 
-- `getClient`: (required) Get a client by its client ID.
-- `registerClient`: (required) Register a new client and return any modifications to the client metadata.
-- `getAccessToken`: (required) Get an access token by its token.
-- `saveAccessToken`: (required) Save an access token.
-- `revokeAccessToken`: (required) Revoke an access token.
-- `getRefreshToken`: (required) Get a refresh token by its token.
-- `saveRefreshToken`: (required) Save a refresh token.
-- `revokeRefreshToken`: (required) Revoke a refresh token.
-- `saveAuthorizationCode`: (required) Save an authorization code.
-- `getAuthorizationCode`: (required) Get an authorization code by its code.
-- `revokeAuthorizationCode`: (required) Revoke an authorization code.
-
+- `getClient`: (required) Resolve a registered client by id.
+- `registerClient`: (required if `dynamicClientRegistration` is true) Persist dynamic registration.
+- Authorization code grant: `saveAuthorizationCode`, `getAuthorizationCode`, `revokeAuthorizationCode` when `authorization_code` is enabled.
+- Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization` when the device grant is enabled.
+- Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `getRefreshToken`, `revokeRefreshToken`.
 
 ### mcpAuthRouter
 
-Express middleware that sets up OAuth Authorization Server endpoints (authorization, token, metadata, and optionally registration/revocation/introspection/device depending on `OAuthServer` settings and methods).
+Express middleware that mounts OAuth authorization server routes and `.well-known` metadata.
 
 ```ts
 import express from 'express';
 import { mcpAuthRouter } from 'mcp-oauth-server';
 
 const app = express();
-app.use(mcpAuthRouter({
-    provider: oauthServer,
-    issuerUrl: new URL('http://localhost:3000'),
-    baseUrl: new URL('http://localhost:3000/oauth'),
-    resourceServerUrl: new URL('http://localhost:3000/mcp'),
-    scopesSupported: ['mcp:tools'],
-}));
+
+app.use(
+    mcpAuthRouter({
+        provider: oauthServer,
+        issuerUrl: new URL('http://localhost:3000'),
+        baseUrl: new URL('http://localhost:3000/oauth'),
+        resourceServerUrl: new URL('http://localhost:3000/mcp'),
+        scopesSupported: ['mcp:tools'],
+    }),
+);
 ```
 
-Feature-gated endpoints:
-- `/register` when `provider.dynamicClientRegistration === true`
-- `/revoke` when `tokenRevocation === true`
-- `/device` when device flow is enabled (`deviceAuthorizationUrl` configured)
+- **`issuerUrl`**: Authorization server issuer identifier (HTTPS in production; localhost is allowed for development).
+- **`baseUrl`**: Optional AS URL base for OAuth endpoints (defaults to `issuerUrl`).
+- **`resourceServerUrl`**: Resource server URL for protected-resource metadata.
 
-The router needs to be mounted at the root of your API. Control the base path of the OAuth server endpoints using the `baseUrl` option. 
+Endpoints (paths are relative to where you mount the router and to `baseUrl` / issuer pathname):
 
-See [router.ts](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/server/auth/router.ts) for the full options.
+- `/.well-known/oauth-authorization-server` and path-specific protected-resource metadata (RFC 8414 / RFC 9728)
+- `/authorize` when `authorization_code` is in `grantTypes`
+- `/token` — authorization code, refresh token, client credentials, and device code exchange (according to `grantTypes`)
+- `/device` when the device grant is enabled and `deviceAuthorizationUrl` is set
+- `/register` when `dynamicClientRegistration` is true
+- `/revoke` — token revocation (RFC 7009)
 
-
+Install at the application root (see [`src/router.ts`](src/router.ts)).
 
 ### authenticateHandler
 
-Express middleware that handles the authorization confirmation endpoint. This is called after the user grants consent on your consent screen.
+Handles user consent completion after your consent UI (authorization code flow).
 
 ```ts
 import { authenticateHandler } from 'mcp-oauth-server';
 
-app.post('/confirm', authenticateHandler({
-    provider: oauthServer,
-    getUser: (req) => {
-        // Extract user ID from your authenticated session
-        // or from the request body if you handle auth in the consent form
-        return req.body.user_id || req.authenticatedUser?.id;
-    },
-    rateLimit: {
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // 100 requests per windowMs
-    },
-}));
-```
-
-**Config options:**
-
-- `provider`: (required) The OAuthServer instance to use for authentication
-- `getUser`: (required) A function to extract the authenticated user ID from the request. Your own authentication logic should either be done here or in a middleware before this one
-- `rateLimit`: (optional) The rate limiting configuration for the authorization endpoint. Set to `false` to disable rate limiting for this endpoint
-
-### requireBearerAuth
-
-Express middleware that validates Bearer tokens and authenticates requests to protected resources (like your MCP server endpoint).
-
-```ts
-import { requireBearerAuth } from 'mcp-oauth-server';
-
-app.post('/mcp', 
-    requireBearerAuth({
-        verifier: oauthServer,
-        requiredScopes: ['mcp:tools'],
+app.post(
+    '/confirm',
+    authenticateUserMiddleware(),
+    authenticateHandler({
+        provider: oauthServer,
+        getUser: async (req) => {
+            return req.session?.userId;
+        },
+        rateLimit: {
+            windowMs: 15 * 60 * 1000,
+            max: 100,
+        },
     }),
-    async (req, res) => {
-        // Access authenticated user ID
-        const userId = req.auth.userId;
-        console.log('Authenticated user:', userId);
-        
-        // Set up MCP Server...
-    }
 );
 ```
 
-See [bearerAuth.ts](https://github.com/modelcontextprotocol/typescript-sdk/blob/main/src/server/auth/middleware/bearerAuth.ts) for the full options.
+**Options**
 
-After authentication, the request will have `req.auth` with:
-- `userId`: The user ID associated with the token
-- `token`: The access token used
-- `scopes`: The scopes granted to the token
+- `provider`: (required) `OAuthServer` instance.
+- `getUser`: (required) Returns the authenticated user id (string or promise).
+- `rateLimit`: (optional) `express-rate-limit` options, or `false` to disable.
+
+### requireBearerAuth
+
+Validates `Authorization: Bearer` tokens for protected routes (for example your MCP HTTP endpoint).
+
+```ts
+import { getOAuthProtectedResourceMetadataUrl, requireBearerAuth } from 'mcp-oauth-server';
+
+const mcpUrl = new URL('http://localhost:3000/mcp');
+
+app.post(
+    '/mcp',
+    requireBearerAuth({
+        verifier: oauthServer,
+        requiredScopes: ['mcp:tools'],
+        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpUrl),
+    }),
+    async (req, res) => {
+        const clientId = req.auth!.clientId;
+        const userId = req.auth!.userId;
+        // Handle MCP request…
+    },
+);
+```
+
+See [`src/middleware/bearerAuth.ts`](src/middleware/bearerAuth.ts) for options.
+
+After successful authentication, `req.auth` contains:
+
+- `token`: Raw access token string
+- `clientId`: OAuth client id
+- `scopes`: Granted scopes
+- `userId`: Present for user-centric grants; absent for pure client-credentials tokens

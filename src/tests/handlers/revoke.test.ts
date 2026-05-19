@@ -139,15 +139,5 @@ describe('Revocation Handler', () => {
                 token_type_hint: 'refresh_token',
             });
         });
-
-        it('includes CORS headers in response', async () => {
-            const response = await supertest(app).post('/revoke').type('form').set('Origin', 'https://example.com').send({
-                client_id: 'valid-client',
-                client_secret: 'valid-secret',
-                token: 'token_to_revoke',
-            });
-
-            expect(response.header['access-control-allow-origin']).toBe('*');
-        });
     });
 });

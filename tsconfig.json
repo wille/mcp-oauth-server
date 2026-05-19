@@ -7,8 +7,6 @@
         "types": [
             "vitest/globals",
         ],
-        "declaration": true,
-        "declarationDir": "./dist",
         "target": "es2020",
         "module": "es2022",
         "moduleResolution": "bundler",
@@ -22,6 +20,7 @@
         "noEmit": true,
         // "allowImportingTsExtensions": true
         "paths": {
+            "src/*": ["./*"],
             "@modelcontextprotocol/core": ["./node_modules/@modelcontextprotocol/core/src/index.ts"],
         }
     },

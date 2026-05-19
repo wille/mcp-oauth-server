@@ -36,8 +36,8 @@ describe('auth-utils', () => {
         it('should match identical URLs', () => {
             expect(
                 checkResourceAllowed({
-                    requestedResource: 'http://127.0.0.1:3002/mcp/internal',
-                    configuredResource: 'http://127.0.0.1:3002/mcp',
+                    requestedResource: 'http://127.0.0.1:3002/mcp',
+                    configuredResource: 'http://127.0.0.1:3002/',
                 }),
             ).toBe(true);
             expect(checkResourceAllowed({ requestedResource: 'https://example.com/', configuredResource: 'https://example.com/' })).toBe(

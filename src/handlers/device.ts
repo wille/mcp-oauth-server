@@ -1,7 +1,6 @@
 import * as z from 'zod/v4';
 import express, { RequestHandler } from 'express';
 import { OAuthServer } from '../OAuthServer.js';
-import cors from 'cors';
 import { authenticateClient } from '../middleware/clientAuth.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
@@ -28,7 +27,6 @@ export function deviceAuthorizationHandler({ provider, rateLimit: rateLimitConfi
 
     const router = express.Router();
 
-    router.use(cors());
     router.use(allowedMethods(['POST']));
     router.use(express.urlencoded({ extended: false }));
 

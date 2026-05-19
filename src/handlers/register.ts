@@ -1,6 +1,5 @@
 import express, { RequestHandler } from 'express';
 import { OAuthClientMetadataSchema } from '../schemas.js';
-import cors from 'cors';
 import { OAuthServer } from '../OAuthServer.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
@@ -27,9 +26,6 @@ export function clientRegistrationHandler({ provider, rateLimit: rateLimitConfig
 
     // Nested router so we can configure middleware and restrict HTTP method
     const router = express.Router();
-
-    // Configure CORS to allow any origin, to make accessible to web-based MCP clients
-    router.use(cors());
 
     router.use(allowedMethods(['POST']));
     router.use(express.json());

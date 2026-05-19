@@ -445,18 +445,4 @@ describe('Token Handler', () => {
             );
         });
     });
-
-    describe('CORS support', () => {
-        it('includes CORS headers in response', async () => {
-            const response = await supertest(app).post('/token').type('form').set('Origin', 'https://example.com').send({
-                client_id: 'valid-client',
-                client_secret: 'valid-secret',
-                grant_type: 'authorization_code',
-                code: 'valid_code',
-                code_verifier: 'valid_verifier',
-            });
-
-            expect(response.header['access-control-allow-origin']).toBe('*');
-        });
-    });
 });

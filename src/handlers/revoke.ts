@@ -1,6 +1,5 @@
 import { OAuthServer } from '../OAuthServer.js';
 import express, { RequestHandler } from 'express';
-import cors from 'cors';
 import { authenticateClient } from '../middleware/clientAuth.js';
 import { OAuthTokenRevocationRequestSchema } from '../schemas.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
@@ -23,9 +22,6 @@ export function revocationHandler({ provider, rateLimit: rateLimitConfig }: Revo
 
     // Nested router so we can configure middleware and restrict HTTP method
     const router = express.Router();
-
-    // Configure CORS to allow any origin, to make accessible to web-based MCP clients
-    router.use(cors());
 
     router.use(allowedMethods(['POST']));
     router.use(express.urlencoded({ extended: false }));
