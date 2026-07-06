@@ -153,6 +153,9 @@ export const OAuthClientMetadataSchema = z
         token_endpoint_auth_method: z.string().optional(),
         grant_types: z.array(z.string()).optional(),
         response_types: z.array(z.string()).optional(),
+        // OIDC Dynamic Client Registration; expected 'native' or 'web' but tolerant on parse.
+        // This server does not enforce OIDC redirect URI constraints, the field is persisted as-is.
+        application_type: z.string().optional(),
         client_name: z.string().optional(),
         client_uri: SafeUrlSchema.optional(),
         logo_uri: OptionalSafeUrlSchema,

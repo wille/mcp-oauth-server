@@ -115,6 +115,18 @@ describe('Client Registration Handler', () => {
             expect(spyRegisterClient).toHaveBeenCalledTimes(1);
         });
 
+        it('persists application_type (SEP-837)', async () => {
+            const response = await supertest(app)
+                .post('/register')
+                .send({
+                    redirect_uris: ['http://127.0.0.1:3000/callback'],
+                    application_type: 'native',
+                });
+
+            expect(response.status).toBe(201);
+            expect(response.body.application_type).toBe('native');
+        });
+
         it('sets client_secret to undefined for token_endpoint_auth_method=none', async () => {
             const clientMetadata: OAuthClientMetadata = {
                 redirect_uris: ['https://example.com/callback'],
