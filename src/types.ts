@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { OAuthClientInformationFull } from './schemas.js';
 
 export interface AuthorizationParams {
     state?: string;
@@ -32,6 +33,16 @@ export interface RefreshToken {
     clientId: string;
     userId?: string;
     resource?: string;
+}
+
+/**
+ * A cached OAuth Client ID Metadata Document (CIMD).
+ */
+export interface ClientIdMetadataDocument {
+    /** The validated client metadata; `client.client_id` is the document URL and the cache key. */
+    client: OAuthClientInformationFull;
+    /** When this cached document must be re-fetched. */
+    expiresAt: Date;
 }
 
 export type DeviceAuthorizationStatus = 'pending' | 'approved' | 'denied';

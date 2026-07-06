@@ -12,6 +12,7 @@ Based on the MCP SDK’s partial OAuth 2.1 Authorization Server implementation.
 - [Features](#features)
 - [OAuth client credentials](#oauth-client-credentials-machine-to-machine)
 - [Device authorization (RFC 8628)](#device-authorization-rfc-8628)
+- [Client ID Metadata Documents (CIMD)](#client-id-metadata-documents-cimd)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
   - [OAuthServer](#oauthserver)
@@ -28,19 +29,26 @@ npm install mcp-oauth-server@latest --save-exact
 
 ## Features
 
-- **MCP Authorization Spec compliant**: Aligns with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization)
-    - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1)
-    - Dynamic Client Registration [(RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591)
+- **MCP Authorization Spec compliant**: Aligns with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization)
+    - [OAuth 2.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1) with mandatory PKCE (`S256` only, [RFC 7636](https://datatracker.ietf.org/doc/html/rfc7636))
+    - [Client ID Metadata Documents](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00) - opt-in, see [CIMD](#client-id-metadata-documents-cimd)
+    - Bearer token usage [(RFC 6750)](https://datatracker.ietf.org/doc/html/rfc6750) - `requireBearerAuth` with `WWW-Authenticate` challenges (`resource_metadata`, `scope`, `insufficient_scope`)
+    - Resource Indicators [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) with token audience validation
+    - Dynamic Client Registration [(RFC 7591)](https://datatracker.ietf.org/doc/html/rfc7591) - deprecated by the MCP spec in favor of [CIMD](#client-id-metadata-documents-cimd), kept for backwards compatibility
     - Token Revocation [(RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
     - Authorization Server Metadata [(RFC 8414)](https://datatracker.ietf.org/doc/html/rfc8414)
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
     - Authorization Server Issuer Identification [(RFC 9207)](https://datatracker.ietf.org/doc/html/rfc9207)
     - Loopback redirect URIs with any port for native apps [(RFC 8252 §7.3)](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)
-- **Grant types**: Configurable via `grantTypes` — `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`)
+- **Grant types**: Configurable via `grantTypes` - `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`, RFC 8628)
 - **Compatibility**: Works with MCP clients that omit a `resource` indicator [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) or requested scopes when needed (`strictResource`)
 - **Flexible storage**: In-memory model for development (`MemoryOAuthServerModel`) or your own `OAuthServerModel` for production
 
-**Not supported:** Token introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662) — validate access tokens via `OAuthServer.verifyAccessToken` (and `requireBearerAuth`) instead.
+**Not supported:**
+
+- Token introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662) - validate access tokens via `OAuthServer.verifyAccessToken` (and `requireBearerAuth`) instead.
+- `private_key_jwt` client authentication for CIMD clients - CIMD clients are treated as public clients (`token_endpoint_auth_method: 'none'`).
+- [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) - RFC 8414 metadata satisfies the MCP spec's discovery requirement on its own.
 
 ## OAuth client credentials (machine-to-machine)
 
@@ -65,7 +73,7 @@ const oauthServer = new OAuthServer({
 
 `POST` to the token endpoint with `grant_type=client_credentials` and authenticate the client (for example `client_id` / `client_secret` per [RFC 6749 §4.4](https://datatracker.ietf.org/doc/html/rfc6749#section-4.4)). MCP clients using `@modelcontextprotocol/client` can use `ClientCredentialsProvider` as described in the extension docs above.
 
-Tokens minted for this grant typically have **no `userId`** on `AuthInfo` — authorize by `clientId` and scopes where appropriate.
+Tokens minted for this grant typically have **no `userId`** on `AuthInfo` - authorize by `clientId` and scopes where appropriate.
 
 ## Device authorization (RFC 8628)
 
@@ -87,13 +95,47 @@ const oauthServer = new OAuthServer({
 });
 ```
 
-3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`) — see `MemoryOAuthServerModel` for a reference.
+3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`) - see `MemoryOAuthServerModel` for a reference.
 
 The auth router exposes **`POST /device`** (under your AS base path) when the device grant and `deviceAuthorizationUrl` are configured. Metadata lists `device_authorization_endpoint` accordingly.
 
 **Approving or denying a login**
 
 Wire **`approveDeviceAuthorizationHandler`** and **`denyDeviceAuthorizationHandler`** on routes you choose; they accept `user_code` (and resolve the authenticated user via `getUser`) so the user can approve or reject the device login out-of-band.
+
+## Client ID Metadata Documents (CIMD)
+
+[Client ID Metadata Documents](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00) let clients use an HTTPS URL as their `client_id`. The authorization server fetches a JSON metadata document from that URL (`client_id`, `client_name`, `redirect_uris`, ...) instead of requiring registration. The [draft MCP Authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization/client-registration#client-id-metadata-documents) recommends CIMD and deprecates Dynamic Client Registration in its favor.
+
+Support is **opt-in** because it makes the server issue outbound HTTPS requests to client-supplied URLs:
+
+```ts
+const oauthServer = new OAuthServer({
+    // enable with defaults
+    clientIdMetadataDocuments: true,
+
+    // or configure it
+    clientIdMetadataDocuments: {
+        // Trust policy: reject metadata URLs outside your allowlist
+        validateClientIdUrl: (url) => trustedDomains.includes(url.hostname),
+        defaultCacheTtlSeconds: 300,
+        maxCacheTtlSeconds: 3600,
+        fetchTimeoutMs: 5000,
+        fetch: myCustomFetch, // defaults to the Node built-in fetch
+    },
+    // ...
+});
+```
+
+When enabled, the server metadata advertises `client_id_metadata_document_supported: true` and `OAuthServer.getClient` resolves URL-formatted client ids by fetching and validating the document: the document's `client_id` must equal the URL exactly, and `client_name` and at least one `redirect_uris` entry are required.
+
+Fetched documents are cached through your `OAuthServerModel` (`saveClientIdMetadataDocument` / `getClientIdMetadataDocument`, implemented by `MemoryOAuthServerModel` out of the box) respecting `Cache-Control` headers, so multiple server instances sharing a model share the cache. Enabling CIMD on a custom model requires implementing both methods.
+
+**Security notes**
+
+- CIMD clients are public clients - documents demanding any `token_endpoint_auth_method` other than `none` are rejected (`private_key_jwt` is not supported).
+- Non-HTTPS URLs, loopback/IP-literal hosts, redirects, and documents over 10 KB are always rejected. These checks do not cover DNS rebinding or internal hostnames - use `validateClientIdUrl` (or network egress filtering) if the server can reach internal services.
+- CIMD cannot prevent localhost redirect URI impersonation by itself; consent screens should display the redirect URI hostname to the user.
 
 ## Quick Start
 
@@ -146,7 +188,8 @@ const oauthServer = new OAuthServer({
 - `strictResource`: (optional) Validate the RFC 8707 `resource` parameter on authorize requests. Default: `true`.
 - `modifyAuthorizationRedirectUrl`: (optional) Mutate the consent redirect URL (e.g. add client display hints as query parameters).
 - `errorHandler`: (optional) Hook for logging or handling errors inside OAuth flows.
-- `dynamicClientRegistration`: (optional) Enable RFC 7591 `/register`. Default: `true`. Construction fails if enabled and `model.registerClient` is missing.
+- `dynamicClientRegistration`: (optional) Enable RFC 7591 `/register`. Default: `true`. Construction fails if enabled and `model.registerClient` is missing. Note: the MCP spec deprecates Dynamic Client Registration in favor of [CIMD](#client-id-metadata-documents-cimd); keep it enabled for backwards compatibility with clients that do not support CIMD.
+- `clientIdMetadataDocuments`: (optional) Enable [Client ID Metadata Documents](#client-id-metadata-documents-cimd) - pass `true` or a `ClientIdMetadataDocumentOptions` object. Default: `false`.
 - `grantTypes`: (optional) Enabled grants. Default: `['authorization_code', 'refresh_token']`. Add `'client_credentials'` and/or `DEVICE_AUTHORIZATION_GRANT_TYPE` as needed.
 - `deviceAuthorizationUrl`: (optional) Page URL where the user enters the user code (RFC 8628). Required together with the device grant on `grantTypes`.
 - `deviceAuthorizationLifetime`: (optional) Device code lifetime in seconds. Default: `900`.
@@ -184,6 +227,7 @@ export class PostgresModel implements OAuthServerModel {
 - `registerClient`: (required if `dynamicClientRegistration` is true) Persist dynamic registration.
 - Authorization code grant: `saveAuthorizationCode`, `getAuthorizationCode`, `revokeAuthorizationCode` when `authorization_code` is enabled.
 - Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization` when the device grant is enabled.
+- CIMD: `saveClientIdMetadataDocument`, `getClientIdMetadataDocument` when [`clientIdMetadataDocuments`](#client-id-metadata-documents-cimd) is enabled.
 - Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `getRefreshToken`, `revokeRefreshToken`.
 
 ### mcpAuthRouter
@@ -214,10 +258,10 @@ Endpoints (paths are relative to where you mount the router and to `baseUrl` / i
 
 - `/.well-known/oauth-authorization-server` and path-specific protected-resource metadata (RFC 8414 / RFC 9728)
 - `/authorize` when `authorization_code` is in `grantTypes`
-- `/token` — authorization code, refresh token, client credentials, and device code exchange (according to `grantTypes`)
+- `/token` - authorization code, refresh token, client credentials, and device code exchange (according to `grantTypes`)
 - `/device` when the device grant is enabled and `deviceAuthorizationUrl` is set
 - `/register` when `dynamicClientRegistration` is true
-- `/revoke` — token revocation (RFC 7009)
+- `/revoke` - token revocation (RFC 7009)
 
 Install at the application root (see [`src/router.ts`](src/router.ts)).
 

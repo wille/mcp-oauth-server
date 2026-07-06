@@ -1,10 +1,12 @@
 import { OAuthClientInformationFull } from './schemas.js';
 import debug from 'debug';
 import { OAuthServerModel } from './OAuthServerModel';
-import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization } from './types';
+import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization, ClientIdMetadataDocument } from './types';
 import { normalizeDeviceUserCode } from './deviceFlow';
 
 const log = debug('oauth:MemoryOAuthServerModel');
+
+const MAX_CLIENT_ID_METADATA_DOCUMENTS = 1000;
 
 export class MemoryOAuthServerModel implements OAuthServerModel {
     private accessTokens = new Map<string, AccessToken>();
@@ -13,6 +15,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     private authorizationCodes = new Map<string, AuthorizationCode>();
     private deviceByDeviceCode = new Map<string, DeviceAuthorization>();
     private deviceCodeByUserCode = new Map<string, string>();
+    private clientIdMetadataDocuments = new Map<string, ClientIdMetadataDocument>();
 
     async saveAuthorizationCode(params: AuthorizationCode, _client?: OAuthClientInformationFull): Promise<void> {
         this.authorizationCodes.set(params.authorizationCode, params);
@@ -59,6 +62,17 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
         this.clients.set(clientMetadata.client_id, clientMetadata);
         return clientMetadata;
+    }
+
+    async saveClientIdMetadataDocument(document: ClientIdMetadataDocument): Promise<void> {
+        if (this.clientIdMetadataDocuments.size >= MAX_CLIENT_ID_METADATA_DOCUMENTS) {
+            this.clientIdMetadataDocuments.delete(this.clientIdMetadataDocuments.keys().next().value!);
+        }
+        this.clientIdMetadataDocuments.set(document.client.client_id, document);
+    }
+
+    async getClientIdMetadataDocument(clientId: string): Promise<ClientIdMetadataDocument | undefined> {
+        return this.clientIdMetadataDocuments.get(clientId);
     }
 
     async saveDeviceAuthorization(device: DeviceAuthorization): Promise<void> {
