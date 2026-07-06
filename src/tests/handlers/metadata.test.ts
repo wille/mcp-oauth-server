@@ -1,5 +1,5 @@
 import { metadataHandler } from '../../handlers/metadata.js';
-import { OAuthMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthMetadata } from '../../schemas.js';
 import express from 'express';
 import supertest from 'supertest';
 

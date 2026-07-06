@@ -2,7 +2,7 @@ import { tokenHandler, TokenHandlerOptions } from '../../handlers/token.js';
 import { OAuthServer } from '../../OAuthServer.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../../deviceFlow.js';
 import { OAuthRegisteredClientsStore } from '../../clients.js';
-import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '../../schemas.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
 import { InvalidGrantError, InvalidTokenError } from '../../errors.js';

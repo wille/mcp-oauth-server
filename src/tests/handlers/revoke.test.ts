@@ -1,7 +1,7 @@
 import { revocationHandler, RevocationHandlerOptions } from '../../handlers/revoke.js';
 import { OAuthServer } from '../../OAuthServer.js';
 import { OAuthRegisteredClientsStore } from '../../clients.js';
-import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformationFull, OAuthTokenRevocationRequest, OAuthTokens } from '../../schemas.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
 import { AuthInfo, AuthorizationParams } from '../../types.js';

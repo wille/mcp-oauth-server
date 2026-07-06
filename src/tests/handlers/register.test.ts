@@ -1,6 +1,6 @@
 import { clientRegistrationHandler, ClientRegistrationHandlerOptions } from '../../handlers/register.js';
 import { OAuthServer } from '../../OAuthServer.js';
-import { OAuthClientInformationFull, OAuthClientMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthClientInformationFull, OAuthClientMetadata } from '../../schemas.js';
 import express from 'express';
 import supertest from 'supertest';
 import { MockInstance } from 'vitest';

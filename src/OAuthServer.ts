@@ -206,7 +206,7 @@ export interface OAuthServerOptions {
 }
 
 /**
- * The OAuth Server provider to be used with `mcpAuthRouter` from [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk)
+ * The OAuth Server provider to be used with {@link mcpAuthRouter}.
  */
 export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsStore {
     model: OAuthServerModel;

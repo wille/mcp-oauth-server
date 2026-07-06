@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type { OAuthClientInformationFull } from '../schemas.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
 import { InvalidTargetError, UnauthorizedClientError } from '../errors.js';

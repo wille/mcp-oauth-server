@@ -3,7 +3,7 @@ import type { Response } from 'express';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
 import { InvalidRequestError, InvalidGrantError, InvalidScopeError, InvalidTargetError } from '../errors.js';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type { OAuthClientInformationFull } from '../schemas.js';
 import type { AuthorizationCode } from '../types.js';
 import { generatePKCEPair, createTestClient } from './test-helpers.js';
 

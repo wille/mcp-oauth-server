@@ -5,9 +5,9 @@
 
 # mcp-oauth-server
 
-OAuth 2.1 Authorization Server implementation built to support the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization) through [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk).
+Standalone OAuth 2.1 Authorization Server implementation built to support the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization), with no runtime dependency on the MCP SDK.
 
-Based on the MCP SDK’s partial OAuth 2.1 Authorization Server implementation.
+Originally forked from the (now sunset) OAuth 2.1 Authorization Server implementation in [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk).
 
 ## Table of Contents
 

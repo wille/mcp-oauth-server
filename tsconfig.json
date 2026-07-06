@@ -21,7 +21,6 @@
         // "allowImportingTsExtensions": true
         "paths": {
             "src/*": ["./*"],
-            "@modelcontextprotocol/core": ["./node_modules/@modelcontextprotocol/core/src/index.ts"],
         }
     },
     "include": ["src", "example"],

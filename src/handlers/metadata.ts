@@ -1,5 +1,5 @@
 import express, { RequestHandler } from 'express';
-import { OAuthMetadata, OAuthProtectedResourceMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
+import { OAuthMetadata, OAuthProtectedResourceMetadata } from '../schemas.js';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 
 export function metadataHandler(metadata: OAuthMetadata | OAuthProtectedResourceMetadata): RequestHandler {

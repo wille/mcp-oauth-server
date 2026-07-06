@@ -32,6 +32,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@rollup/plugin-typescript": "^12.3.0",
     "@types/debug": "^4.1.12",
     "@types/express": "^5.0.5",
@@ -46,7 +47,6 @@
     "vitest": "^4.0.10"
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
     "express": ">=4",
     "express-rate-limit": ">=7.5"
   },

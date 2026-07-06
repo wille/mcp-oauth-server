@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { OAuthClientInformationFull } from '@modelcontextprotocol/sdk/shared/auth.js';
+import type { OAuthClientInformationFull } from '../schemas.js';
 import type http from 'node:http';
 import { type Server } from 'node:http';
 import type { Response } from 'express';
