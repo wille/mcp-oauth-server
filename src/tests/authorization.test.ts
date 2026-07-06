@@ -329,6 +329,20 @@ describe('OAuthServer Authorization Code Flow', () => {
             await expect(oauthServer.authenticate(client, params, userId, mockResponse)).rejects.toThrow(InvalidRequestError);
         });
 
+        it('should allow a different port on a registered loopback redirect URI (RFC 8252)', async () => {
+            const params = {
+                redirectUri: 'http://localhost:51234/callback',
+                codeChallenge: 'test-challenge',
+            };
+            const userId = 'user-123';
+
+            await oauthServer.authenticate(client, params, userId, mockResponse);
+
+            const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+            expect(redirectUrl.origin).toBe('http://localhost:51234');
+            expect(redirectUrl.searchParams.has('code')).toBe(true);
+        });
+
         it('should use default scopes when none provided', async () => {
             const params = {
                 redirectUri: 'http://localhost:3000/callback',

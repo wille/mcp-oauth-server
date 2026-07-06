@@ -23,6 +23,13 @@ describe('Authorization Handler', () => {
         scope: 'profile email',
     };
 
+    const loopbackClient: OAuthClientInformationFull = {
+        client_id: 'loopback-client',
+        client_secret: 'valid-secret',
+        redirect_uris: ['http://127.0.0.1:3030/callback'],
+        scope: 'profile email',
+    };
+
     // Mock client store
     const mockClientStore: OAuthRegisteredClientsStore = {
         async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
@@ -30,6 +37,8 @@ describe('Authorization Handler', () => {
                 return validClient;
             } else if (clientId === 'multi-redirect-client') {
                 return multiRedirectClient;
+            } else if (clientId === 'loopback-client') {
+                return loopbackClient;
             }
             return undefined;
         },
@@ -133,6 +142,44 @@ describe('Authorization Handler', () => {
             expect(response.status).toBe(302);
             const location = new URL(response.header.location);
             expect(location.origin + location.pathname).toBe('https://example.com/callback');
+        });
+
+        it('allows a different port on a registered loopback redirect_uri (RFC 8252)', async () => {
+            const response = await supertest(app).get('/authorize').query({
+                client_id: 'loopback-client',
+                redirect_uri: 'http://127.0.0.1:51234/callback',
+                response_type: 'code',
+                code_challenge: 'challenge123',
+                code_challenge_method: 'S256',
+            });
+
+            expect(response.status).toBe(302);
+            const location = new URL(response.header.location);
+            expect(location.origin + location.pathname).toBe('http://127.0.0.1:51234/callback');
+        });
+
+        it('rejects a different loopback hostname than registered', async () => {
+            const response = await supertest(app).get('/authorize').query({
+                client_id: 'loopback-client',
+                redirect_uri: 'http://localhost:51234/callback',
+                response_type: 'code',
+                code_challenge: 'challenge123',
+                code_challenge_method: 'S256',
+            });
+
+            expect(response.status).toBe(400);
+        });
+
+        it('rejects a different port on non-loopback redirect_uri', async () => {
+            const response = await supertest(app).get('/authorize').query({
+                client_id: 'valid-client',
+                redirect_uri: 'https://example.com:8443/callback',
+                response_type: 'code',
+                code_challenge: 'challenge123',
+                code_challenge_method: 'S256',
+            });
+
+            expect(response.status).toBe(400);
         });
     });
 
