@@ -10,6 +10,7 @@ function createDeviceFlowApp() {
     const model = new MemoryOAuthServerModel();
     const provider = new OAuthServer({
         model,
+        issuerUrl: new URL('http://127.0.0.1/'),
         authorizationUrl: new URL('http://127.0.0.1/consent'),
         deviceAuthorizationUrl: new URL('http://127.0.0.1/device'),
         grantTypes: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
@@ -22,7 +23,6 @@ function createDeviceFlowApp() {
     app.use(
         mcpAuthRouter({
             provider,
-            issuerUrl: new URL('http://127.0.0.1/'),
             scopesSupported: ['mcp:tools'],
         }),
     );

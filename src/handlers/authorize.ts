@@ -139,10 +139,10 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
         } catch (error) {
             // Post-redirect errors - redirect with error parameters
             if (error instanceof OAuthError) {
-                res.redirect(302, createErrorRedirect(redirect_uri, error, state));
+                res.redirect(302, createErrorRedirect(redirect_uri, error, state, provider.issuerUrl));
             } else {
                 const serverError = new ServerError('Internal Server Error');
-                res.redirect(302, createErrorRedirect(redirect_uri, serverError, state));
+                res.redirect(302, createErrorRedirect(redirect_uri, serverError, state, provider.issuerUrl));
             }
         }
     });
@@ -153,7 +153,7 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
 /**
  * Helper function to create redirect URL with error parameters
  */
-function createErrorRedirect(redirectUri: string, error: OAuthError, state?: string): string {
+function createErrorRedirect(redirectUri: string, error: OAuthError, state?: string, issuerUrl?: URL): string {
     const errorUrl = new URL(redirectUri);
     errorUrl.searchParams.set('error', error.errorCode);
     errorUrl.searchParams.set('error_description', error.message);
@@ -162,6 +162,10 @@ function createErrorRedirect(redirectUri: string, error: OAuthError, state?: str
     }
     if (state) {
         errorUrl.searchParams.set('state', state);
+    }
+    if (issuerUrl) {
+        // RFC 9207 §2: the iss parameter is required on error responses too.
+        errorUrl.searchParams.set('iss', issuerUrl.href);
     }
     return errorUrl.href;
 }

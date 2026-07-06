@@ -20,18 +20,14 @@ if (allowInsecureIssuerUrl) {
 export type AuthRouterOptions = {
     /**
      * A provider implementing the actual authorization logic for this router.
+     * The provider's `issuerUrl` is used as the issuer identifier in the advertised metadata.
      */
     provider: OAuthServer;
 
     /**
-     * The authorization server's issuer identifier, which is a URL that uses the "https" scheme and has no query or fragment components.
-     */
-    issuerUrl: URL;
-
-    /**
      * The base URL of the authorization server to use for the metadata endpoints.
      *
-     * If not provided, the issuer URL will be used as the base URL.
+     * If not provided, the provider's issuer URL will be used as the base URL.
      */
     baseUrl?: URL;
 
@@ -47,7 +43,7 @@ export type AuthRouterOptions = {
 
     /**
      * The URL of the protected resource (RS) whose metadata we advertise.
-     * If not provided, falls back to `baseUrl` and then to `issuerUrl` (AS=RS).
+     * If not provided, falls back to `baseUrl` and then to the provider's `issuerUrl` (AS=RS).
      */
     resourceServerUrl?: URL;
 
@@ -79,12 +75,14 @@ const checkIssuerUrl = (issuer: URL): void => {
 
 export const createOAuthMetadata = (options: {
     provider: OAuthServer;
-    issuerUrl: URL;
     baseUrl?: URL;
     serviceDocumentationUrl?: URL;
     scopesSupported?: string[];
 }): OAuthMetadata => {
-    const issuer = options.issuerUrl;
+    const issuer = options.provider.issuerUrl;
+    if (!issuer) {
+        throw new Error('OAuthServer must be configured with issuerUrl to serve authorization server metadata');
+    }
     const baseUrl = options.baseUrl || issuer;
 
     checkIssuerUrl(issuer);
@@ -125,6 +123,13 @@ export const createOAuthMetadata = (options: {
         revocation_endpoint_auth_methods_supported: revocation_endpoint ? ['client_secret_post'] : undefined,
 
         registration_endpoint,
+
+        // RFC 9207: OAuthServer.authenticate() and the bundled handlers append `iss` to
+        // every redirect back to the client's redirect_uri, so we can claim support.
+        // SEP-2468 clients reject a callback that omits `iss` when support is advertised,
+        // so custom consent flows that issue the callback redirect themselves must
+        // append `iss` as well.
+        authorization_response_iss_parameter_supported: true,
 
         device_authorization_endpoint:
             options.provider.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE) && options.provider.deviceAuthorizationUrl

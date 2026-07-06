@@ -225,6 +225,25 @@ describe('Authorization Handler', () => {
             const location = new URL(response.header.location);
             expect(location.searchParams.get('error')).toBe('invalid_request');
         });
+
+        it('includes iss in error redirects when provider issuerUrl is set (RFC 9207)', async () => {
+            const issuerApp = express();
+            const issuerProvider = { ...mockProvider, issuerUrl: new URL('https://auth.example.com/') };
+            issuerApp.use('/authorize', authorizationHandler({ provider: issuerProvider as OAuthServer }));
+
+            const response = await supertest(issuerApp).get('/authorize').query({
+                client_id: 'valid-client',
+                redirect_uri: 'https://example.com/callback',
+                response_type: 'token', // invalid - triggers error redirect
+                code_challenge: 'challenge123',
+                code_challenge_method: 'S256',
+            });
+
+            expect(response.status).toBe(302);
+            const location = new URL(response.header.location);
+            expect(location.searchParams.get('error')).toBe('invalid_request');
+            expect(location.searchParams.get('iss')).toBe('https://auth.example.com/');
+        });
     });
 
     describe('Resource parameter validation', () => {

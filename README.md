@@ -34,6 +34,7 @@ npm install mcp-oauth-server@latest --save-exact
     - Token Revocation [(RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
     - Authorization Server Metadata [(RFC 8414)](https://datatracker.ietf.org/doc/html/rfc8414)
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
+    - Authorization Server Issuer Identification [(RFC 9207)](https://datatracker.ietf.org/doc/html/rfc9207)
     - Loopback redirect URIs with any port for native apps [(RFC 8252 §7.3)](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)
 - **Grant types**: Configurable via `grantTypes` — `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`)
 - **Compatibility**: Works with MCP clients that omit a `resource` indicator [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) or requested scopes when needed (`strictResource`)
@@ -124,6 +125,7 @@ OAuth 2.1 server instance passed to `mcpAuthRouter`.
 import { OAuthServer } from 'mcp-oauth-server';
 
 const oauthServer = new OAuthServer({
+    issuerUrl: new URL('http://localhost:3000'),
     authorizationUrl: new URL('http://localhost:3000/consent'),
     scopesSupported: ['mcp:tools'],
     grantTypes: ['authorization_code', 'refresh_token', 'client_credentials'],
@@ -133,6 +135,7 @@ const oauthServer = new OAuthServer({
 **Options**
 
 - `model`: (optional) Storage backend. Default: `MemoryOAuthServerModel`.
+- `issuerUrl`: (required when using `mcpAuthRouter`) Authorization server issuer identifier (HTTPS in production; localhost is allowed for development). Used as the metadata `issuer` and appended as the RFC 9207 `iss` parameter on authorization responses.
 - `authorizationUrl`: (required) Redirect URL for interactive authorization (consent). Required when `authorization_code` is enabled.
 - `resourceServerUrl`: (optional) MCP resource server URL; used for resource validation and metadata when set.
 - `scopesSupported`: (optional) Supported scopes; if the client omits `scope`, the server may default to these supported scopes.
@@ -196,7 +199,6 @@ const app = express();
 app.use(
     mcpAuthRouter({
         provider: oauthServer,
-        issuerUrl: new URL('http://localhost:3000'),
         baseUrl: new URL('http://localhost:3000/oauth'),
         resourceServerUrl: new URL('http://localhost:3000/mcp'),
         scopesSupported: ['mcp:tools'],
@@ -204,8 +206,8 @@ app.use(
 );
 ```
 
-- **`issuerUrl`**: Authorization server issuer identifier (HTTPS in production; localhost is allowed for development).
-- **`baseUrl`**: Optional AS URL base for OAuth endpoints (defaults to `issuerUrl`).
+- **`provider`**: The `OAuthServer` instance. Its `issuerUrl` is used as the issuer identifier in the advertised metadata.
+- **`baseUrl`**: Optional AS URL base for OAuth endpoints (defaults to the provider's `issuerUrl`).
 - **`resourceServerUrl`**: Resource server URL for protected-resource metadata.
 
 Endpoints (paths are relative to where you mount the router and to `baseUrl` / issuer pathname):
