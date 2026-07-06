@@ -1,7 +1,7 @@
 import { OAuthClientInformationFull } from './schemas.js';
 import { OAuthClientMetadata } from './schemas.js';
 import { OAuthRegisteredClientsStore } from './clients.js';
-import { AuthorizationCode, AccessToken, RefreshToken, DeviceAuthorization } from './types.js';
+import { AuthorizationCode, AccessToken, RefreshToken, DeviceAuthorization, ClientIdMetadataDocument } from './types.js';
 
 export interface OAuthServerModel extends OAuthRegisteredClientsStore {
     registerClient?(client: OAuthClientMetadata): Promise<OAuthClientInformationFull>;
@@ -9,6 +9,9 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
     saveAuthorizationCode?(code: AuthorizationCode, client: OAuthClientInformationFull): Promise<void>;
     getAuthorizationCode?(authorizationCode: string): Promise<AuthorizationCode | undefined>;
     revokeAuthorizationCode?(authorizationCode: string): Promise<void>;
+
+    saveClientIdMetadataDocument?(document: ClientIdMetadataDocument): Promise<void>;
+    getClientIdMetadataDocument?(clientId: string): Promise<ClientIdMetadataDocument | undefined>;
 
     saveDeviceAuthorization?(device: DeviceAuthorization): Promise<void>;
     getDeviceAuthorizationByDeviceCode?(deviceCode: string): Promise<DeviceAuthorization | undefined>;

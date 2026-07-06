@@ -16,6 +16,7 @@ import {
     AccessDeniedError,
     AuthorizationPendingError,
     ExpiredTokenError,
+    InvalidClientError,
     InvalidGrantError,
     InvalidRequestError,
     InvalidScopeError,
@@ -33,6 +34,7 @@ import { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceCode, generateDeviceUser
 import { OAuthServerModel } from './OAuthServerModel';
 import { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
 import { validateChallenge } from './pkce';
+import { ClientIdMetadataDocumentFetcher, ClientIdMetadataDocumentOptions, isClientIdMetadataDocumentUrl } from './cimd';
 
 const log = debug('oauth:OAuthServer');
 export const SUPPORTED_GRANT_TYPES = [
@@ -187,6 +189,20 @@ export interface OAuthServerOptions {
      * @default true
      */
     dynamicClientRegistration?: boolean;
+
+    /**
+     * Enable OAuth Client ID Metadata Documents (CIMD): clients use an HTTPS URL as their
+     * `client_id` and this server fetches the client metadata from that URL.
+     *
+     * Enabling this makes the server issue outbound HTTPS requests to client-supplied URLs.
+     * Loopback and IP-literal hosts are always rejected, but consider setting
+     * {@link ClientIdMetadataDocumentOptions.validateClientIdUrl} (e.g. a domain allowlist)
+     * if this server can reach internal services.
+     *
+     * @see https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00
+     * @default false
+     */
+    clientIdMetadataDocuments?: boolean | ClientIdMetadataDocumentOptions;
 }
 
 /**
@@ -209,6 +225,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     errorHandler: ErrorHandler;
     grantTypes: OAuthGrantType[];
     dynamicClientRegistration: boolean;
+    clientIdMetadataDocumentFetcher?: ClientIdMetadataDocumentFetcher;
 
     deviceAuthorizationUrl?: URL;
     deviceAuthorizationLifetime: number;
@@ -232,6 +249,11 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         this.devicePollIntervalSeconds = options.devicePollIntervalSeconds ?? 5;
         this.grantTypes = options.grantTypes ?? DEFAULT_GRANT_TYPES;
         this.dynamicClientRegistration = options.dynamicClientRegistration ?? true;
+        if (options.clientIdMetadataDocuments) {
+            this.clientIdMetadataDocumentFetcher = new ClientIdMetadataDocumentFetcher(
+                typeof options.clientIdMetadataDocuments === 'object' ? options.clientIdMetadataDocuments : {},
+            );
+        }
         this.validateGrantTypesAndModelCapabilities();
     }
 
@@ -274,14 +296,59 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new Error('dynamic client registration is not supported by this authorization server');
             }
         }
+
+        if (this.clientIdMetadataDocumentFetcher) {
+            if (!m.saveClientIdMetadataDocument || !m.getClientIdMetadataDocument) {
+                throw new Error(
+                    'clientIdMetadataDocuments requires OAuthServerModel methods: saveClientIdMetadataDocument, getClientIdMetadataDocument',
+                );
+            }
+        }
     }
 
     async getClient(clientId: string) {
         try {
+            if (this.clientIdMetadataDocumentFetcher && isClientIdMetadataDocumentUrl(clientId)) {
+                const cached = await this.model.getClientIdMetadataDocument!(clientId);
+                if (cached && cached.expiresAt > new Date()) {
+                    this.validateClientIdMetadataDocumentClient(cached.client);
+                    return cached.client;
+                }
+
+                const document = await this.clientIdMetadataDocumentFetcher.fetchClient(clientId);
+                this.validateClientIdMetadataDocumentClient(document.client);
+
+                // An expiresAt in the past means the response forbade caching (Cache-Control no-store/no-cache)
+                if (document.expiresAt > new Date()) {
+                    await this.model.saveClientIdMetadataDocument!(document);
+                }
+
+                return document.client;
+            }
+
             return await this.model.getClient!(clientId);
         } catch (error) {
             this.errorHandler('getClient', error, { clientId });
             throw error;
+        }
+    }
+
+    /**
+     * Validates a client resolved from a Client ID Metadata Document against this server's
+     * configuration. CIMD clients are public clients: they cannot hold a client_secret, and
+     * private_key_jwt authentication is not supported by this server.
+     */
+    private validateClientIdMetadataDocumentClient(client: OAuthClientInformationFull): void {
+        if (client.token_endpoint_auth_method && client.token_endpoint_auth_method !== 'none') {
+            throw new InvalidClientError(
+                `Unsupported token_endpoint_auth_method for client_id metadata document client: ${client.token_endpoint_auth_method}`,
+            );
+        }
+
+        client.grant_types ||= ['authorization_code'];
+        const unsupportedGrant = client.grant_types.find((grant) => !this.grantTypes.includes(grant as OAuthGrantType));
+        if (unsupportedGrant) {
+            throw new InvalidClientError(`Unsupported grant_type in client_id metadata document: ${unsupportedGrant}`);
         }
     }
 

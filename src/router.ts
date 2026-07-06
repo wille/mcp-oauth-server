@@ -124,6 +124,10 @@ export const createOAuthMetadata = (options: {
 
         registration_endpoint,
 
+        // OAuth Client ID Metadata Documents: URL-formatted client_ids resolved by fetching
+        // the metadata document, when enabled on the provider.
+        client_id_metadata_document_supported: options.provider.clientIdMetadataDocumentFetcher ? true : undefined,
+
         // RFC 9207: OAuthServer.authenticate() and the bundled handlers append `iss` to
         // every redirect back to the client's redirect_uri, so we can claim support.
         // SEP-2468 clients reject a callback that omits `iss` when support is advertised,

@@ -16,6 +16,7 @@ const mcpOAuthProvider = new OAuthServer({
     issuerUrl: new URL('http://localhost:3000/'),
     authorizationUrl: new URL('http://localhost:3000/consent'),
     scopesSupported: ['mcp:tools'],
+    clientIdMetadataDocuments: true,
     modifyAuthorizationRedirectUrl: (url, client, params) => {
         // Include metadata in the query string we can display on the consent screen.
         // The site holding the consent screen could also query the backend for this data
