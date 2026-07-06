@@ -1,4 +1,7 @@
 [![NPM package](https://img.shields.io/npm/v/mcp-oauth-server.svg?style=flat-square)](https://www.npmjs.com/package/mcp-oauth-server)
+[![Build status](https://img.shields.io/github/actions/workflow/status/wille/mcp-oauth-server/commit.yml?style=flat-square)](https://github.com/wille/mcp-oauth-server/actions/workflows/commit.yml)
+[![NPM downloads](https://img.shields.io/npm/dm/mcp-oauth-server.svg?style=flat-square)](https://www.npmjs.com/package/mcp-oauth-server)
+[![License](https://img.shields.io/npm/l/mcp-oauth-server.svg?style=flat-square)](https://github.com/wille/mcp-oauth-server/blob/master/LICENSE)
 
 # mcp-oauth-server
 
