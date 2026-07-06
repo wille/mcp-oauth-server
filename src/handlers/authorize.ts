@@ -5,6 +5,7 @@ import { OAuthServer } from '../OAuthServer.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
+import { redirectUriMatches } from '../redirect-uri.js';
 
 export type AuthorizationHandlerOptions = {
     provider: OAuthServer;
@@ -78,7 +79,8 @@ export function authorizationHandler({ provider, rateLimit: rateLimitConfig }: A
             }
 
             if (redirect_uri !== undefined) {
-                if (!client.redirect_uris.includes(redirect_uri)) {
+                const requested = redirect_uri;
+                if (!client.redirect_uris.some((registered) => redirectUriMatches(requested, registered))) {
                     throw new InvalidRequestError('Unregistered redirect_uri');
                 }
             } else if (client.redirect_uris.length === 1) {

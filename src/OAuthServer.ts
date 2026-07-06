@@ -10,6 +10,7 @@ import {
 import { Response } from 'express';
 import { AuthInfo } from './types.js';
 import { checkResourceAllowed, resourceUrlFromServerUrl } from './resource-uri.js';
+import { redirectUriMatches } from './redirect-uri.js';
 import {
     CustomOAuthError,
     AccessDeniedError,
@@ -364,7 +365,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             params.scopes = this.validateScope(params.scopes);
             this.validateResource(params.resource);
 
-            if (!client.redirect_uris.includes(params.redirectUri)) {
+            if (!client.redirect_uris.some((registered) => redirectUriMatches(params.redirectUri, registered))) {
                 throw new InvalidRequestError('Unregistered redirect_uri');
             }
 

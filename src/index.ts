@@ -19,4 +19,5 @@ export { AuthorizationPendingError, SlowDownError, ExpiredTokenError, InvalidReq
 export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from './router.js';
 export { requireBearerAuth } from './middleware/bearerAuth.js';
 export { checkResourceAllowed } from './resource-uri.js';
+export { redirectUriMatches } from './redirect-uri.js';
 export * from './schemas.js';

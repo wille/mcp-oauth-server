@@ -34,6 +34,7 @@ npm install mcp-oauth-server@latest --save-exact
     - Token Revocation [(RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
     - Authorization Server Metadata [(RFC 8414)](https://datatracker.ietf.org/doc/html/rfc8414)
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
+    - Loopback redirect URIs with any port for native apps [(RFC 8252 §7.3)](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)
 - **Grant types**: Configurable via `grantTypes` — `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`)
 - **Compatibility**: Works with MCP clients that omit a `resource` indicator [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) or requested scopes when needed (`strictResource`)
 - **Flexible storage**: In-memory model for development (`MemoryOAuthServerModel`) or your own `OAuthServerModel` for production
