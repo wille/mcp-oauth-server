@@ -13,6 +13,7 @@ const mcpServerUrl = new URL('http://localhost:3000/mcp');
 
 const mcpOAuthProvider = new OAuthServer({
     model: memoryOAuthServerModel,
+    issuerUrl: new URL('http://localhost:3000/'),
     authorizationUrl: new URL('http://localhost:3000/consent'),
     scopesSupported: ['mcp:tools'],
     modifyAuthorizationRedirectUrl: (url, client, params) => {
@@ -27,7 +28,6 @@ const mcpOAuthProvider = new OAuthServer({
 
 const mcpAuthMiddleware = mcpAuthRouter({
     provider: mcpOAuthProvider,
-    issuerUrl: new URL('http://localhost:3000/'),
     resourceServerUrl: mcpServerUrl,
     scopesSupported: ['mcp:tools'],
 });

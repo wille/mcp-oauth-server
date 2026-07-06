@@ -136,6 +136,16 @@ export interface OAuthServerOptions {
     resourceServerUrl?: URL;
 
     /**
+     * The authorization server's issuer identifier, a URL using the "https" scheme
+     * with no query or fragment components (localhost is allowed for development).
+     *
+     * Used as the `issuer` in the authorization server metadata (RFC 8414) served by
+     * `mcpAuthRouter`, and appended as the `iss` query parameter (RFC 9207) to
+     * authorization responses. Required when using `mcpAuthRouter`.
+     */
+    issuerUrl?: URL;
+
+    /**
      * Modify the authorization redirect URL.
      * This can be used to add metadata to the authorization redirect URL, like the client name, client URI, or logo URI.
      * @param url The authorizationUrl with required oauth query string parameters set
@@ -194,6 +204,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     authorizationCodeLifetime: number;
     strictResource: boolean;
     resourceServerUrl?: URL;
+    issuerUrl?: URL;
     modifyAuthorizationRedirectUrl?: OAuthServerOptions['modifyAuthorizationRedirectUrl'];
     errorHandler: ErrorHandler;
     grantTypes: OAuthGrantType[];
@@ -213,6 +224,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         this.authorizationCodeLifetime = options.authorizationCodeLifetime || 5 * 60;
         this.strictResource = options.strictResource ?? true;
         this.resourceServerUrl = options.resourceServerUrl ? resourceUrlFromServerUrl(options.resourceServerUrl) : undefined;
+        this.issuerUrl = options.issuerUrl;
         this.modifyAuthorizationRedirectUrl = options.modifyAuthorizationRedirectUrl;
         this.errorHandler = options.errorHandler || defaultErrorHandler;
         this.deviceAuthorizationUrl = options.deviceAuthorizationUrl;
@@ -376,6 +388,10 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             });
             if (params.state) {
                 searchParams.set('state', params.state);
+            }
+            if (this.issuerUrl) {
+                // RFC 9207: identify the authorization server in the authorization response
+                searchParams.set('iss', this.issuerUrl.href);
             }
 
             await this.model.saveAuthorizationCode!(

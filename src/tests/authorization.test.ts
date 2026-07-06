@@ -343,6 +343,38 @@ describe('OAuthServer Authorization Code Flow', () => {
             expect(redirectUrl.searchParams.has('code')).toBe(true);
         });
 
+        it('should include iss in redirect when issuerUrl is configured (RFC 9207)', async () => {
+            const issuerServer = new OAuthServer({
+                model,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                strictResource: false,
+                issuerUrl: new URL('http://localhost:3000/'),
+            });
+
+            const params = {
+                redirectUri: 'http://localhost:3000/callback',
+                codeChallenge: 'test-challenge',
+            };
+
+            await issuerServer.authenticate(client, params, 'user-123', mockResponse);
+
+            const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+            expect(redirectUrl.searchParams.get('iss')).toBe('http://localhost:3000/');
+        });
+
+        it('should not include iss in redirect when issuerUrl is not configured', async () => {
+            const params = {
+                redirectUri: 'http://localhost:3000/callback',
+                codeChallenge: 'test-challenge',
+            };
+
+            await oauthServer.authenticate(client, params, 'user-123', mockResponse);
+
+            const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+            expect(redirectUrl.searchParams.has('iss')).toBe(false);
+        });
+
         it('should use default scopes when none provided', async () => {
             const params = {
                 redirectUri: 'http://localhost:3000/callback',

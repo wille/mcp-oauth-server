@@ -144,11 +144,20 @@ describe('MCP Auth Router', () => {
         },
     } as unknown as OAuthServer;
 
+    const withIssuer = (provider: OAuthServer, issuerUrl: URL): OAuthServer => ({ ...provider, issuerUrl }) as unknown as OAuthServer;
+
     describe('Router creation', () => {
-        it('throws error for non-HTTPS issuer URL', () => {
+        it('throws when the provider has no issuerUrl', () => {
             const options: AuthRouterOptions = {
                 provider: mockProvider,
-                issuerUrl: new URL('http://auth.example.com'),
+            };
+
+            expect(() => mcpAuthRouter(options)).toThrow('OAuthServer must be configured with issuerUrl');
+        });
+
+        it('throws error for non-HTTPS issuer URL', () => {
+            const options: AuthRouterOptions = {
+                provider: withIssuer(mockProvider, new URL('http://auth.example.com')),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must be HTTPS');
@@ -156,8 +165,7 @@ describe('MCP Auth Router', () => {
 
         it('allows localhost HTTP for development', () => {
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('http://localhost:3000'),
+                provider: withIssuer(mockProvider, new URL('http://localhost:3000')),
             };
 
             expect(() => mcpAuthRouter(options)).not.toThrow();
@@ -165,8 +173,7 @@ describe('MCP Auth Router', () => {
 
         it('throws error for issuer URL with fragment', () => {
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com#fragment'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com#fragment')),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must not have a fragment');
@@ -174,8 +181,7 @@ describe('MCP Auth Router', () => {
 
         it('throws error for issuer URL with query string', () => {
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com?param=value'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com?param=value')),
             };
 
             expect(() => mcpAuthRouter(options)).toThrow('Issuer URL must not have a query string');
@@ -183,8 +189,7 @@ describe('MCP Auth Router', () => {
 
         it('successfully creates router with valid options', () => {
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com')),
             };
 
             expect(() => mcpAuthRouter(options)).not.toThrow();
@@ -230,8 +235,7 @@ describe('MCP Auth Router', () => {
             // Setup full-featured router
             app = express();
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com')),
                 serviceDocumentationUrl: new URL('https://docs.example.com'),
             };
             app.use(mcpAuthRouter(options));
@@ -255,6 +259,7 @@ describe('MCP Auth Router', () => {
             expect(response.body.code_challenge_methods_supported).toEqual(['S256']);
             expect(response.body.token_endpoint_auth_methods_supported).toEqual(['client_secret_post', 'none']);
             expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
+            expect(response.body.authorization_response_iss_parameter_supported).toBe(true);
 
             // Verify optional fields
             expect(response.body.service_documentation).toBe('https://docs.example.com/');
@@ -264,8 +269,7 @@ describe('MCP Auth Router', () => {
             // Setup minimal router
             const minimalApp = express();
             const options: AuthRouterOptions = {
-                provider: mockProviderMinimal,
-                issuerUrl: new URL('https://auth.example.com'),
+                provider: withIssuer(mockProviderMinimal, new URL('https://auth.example.com')),
             };
             minimalApp.use(mcpAuthRouter(options));
 
@@ -289,8 +293,7 @@ describe('MCP Auth Router', () => {
             // Setup router with draft protocol version
             const draftApp = express();
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://mcp.example.com'),
+                provider: withIssuer(mockProvider, new URL('https://mcp.example.com')),
                 scopesSupported: ['read', 'write'],
                 resourceName: 'Test API',
             };
@@ -311,8 +314,7 @@ describe('MCP Auth Router', () => {
             const app = express();
 
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com/oauth'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com/oauth')),
             };
             app.use(mcpAuthRouter(options));
 
@@ -333,8 +335,7 @@ describe('MCP Auth Router', () => {
             // Setup full-featured router
             app = express();
             const options: AuthRouterOptions = {
-                provider: mockProvider,
-                issuerUrl: new URL('https://auth.example.com'),
+                provider: withIssuer(mockProvider, new URL('https://auth.example.com')),
             };
             app.use(mcpAuthRouter(options));
             vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -404,8 +405,7 @@ describe('MCP Auth Router', () => {
             // Setup minimal router
             const minimalApp = express();
             const options: AuthRouterOptions = {
-                provider: mockProviderMinimal,
-                issuerUrl: new URL('https://auth.example.com'),
+                provider: withIssuer(mockProviderMinimal, new URL('https://auth.example.com')),
             };
             minimalApp.use(mcpAuthRouter(options));
 
