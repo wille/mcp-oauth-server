@@ -312,6 +312,7 @@ app.post(
         verifier: oauthServer,
         requiredScopes: ['mcp:tools'],
         resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpUrl),
+        resource: mcpUrl,
     }),
     async (req, res) => {
         const clientId = req.auth!.clientId;
@@ -321,7 +322,12 @@ app.post(
 );
 ```
 
-See [`src/middleware/bearerAuth.ts`](src/middleware/bearerAuth.ts) for options.
+- `verifier`: Token verifier, typically the `OAuthServer` instance.
+- `requiredScopes`: (optional) Scopes the token must include; missing scopes yield `403` with an `insufficient_scope` challenge.
+- `resourceMetadataUrl`: (optional) Protected resource metadata URL advertised in `WWW-Authenticate` challenges (RFC 9728).
+- `resource`: (optional) Canonical RFC 8707 resource identifier of this endpoint. When set, tokens must carry a matching resource (token audience validation); tokens without one are rejected with `401`. `OAuthServer.verifyAccessToken` already enforces this when `resourceServerUrl` is configured - set it here when using a custom verifier or protecting multiple resources.
+
+See [`src/middleware/bearerAuth.ts`](src/middleware/bearerAuth.ts) for details.
 
 After successful authentication, `req.auth` contains:
 

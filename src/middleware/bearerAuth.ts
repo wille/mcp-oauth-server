@@ -2,6 +2,7 @@ import { RequestHandler } from 'express';
 import { InsufficientScopeError, InvalidTokenError, OAuthError, ServerError } from '../errors.js';
 import { AuthInfo } from '../types.js';
 import { OAuthTokenVerifier } from '../token-verifier.js';
+import { checkResourceAllowed, resourceUrlFromServerUrl } from '../resource-uri.js';
 
 export type BearerAuthMiddlewareOptions = {
     /**
@@ -18,6 +19,18 @@ export type BearerAuthMiddlewareOptions = {
      * Optional resource metadata URL to include in WWW-Authenticate header.
      */
     resourceMetadataUrl?: string;
+
+    /**
+     * The canonical resource identifier (RFC 8707) of this protected resource.
+     *
+     * When set, tokens must carry a resource matching it (token audience validation
+     * per the MCP Authorization spec); tokens without a resource are rejected.
+     *
+     * `OAuthServer.verifyAccessToken` already performs this check when the server is
+     * configured with `resourceServerUrl` - set this when using a custom verifier, or
+     * when protecting multiple resources with different middleware instances.
+     */
+    resource?: URL;
 };
 
 declare module 'express-serve-static-core' {
@@ -37,7 +50,15 @@ declare module 'express-serve-static-core' {
  * If resourceMetadataUrl is provided, it will be included in the WWW-Authenticate header
  * for 401 responses as per the OAuth 2.0 Protected Resource Metadata spec.
  */
-export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetadataUrl }: BearerAuthMiddlewareOptions): RequestHandler {
+export function requireBearerAuth({
+    verifier,
+    requiredScopes = [],
+    resourceMetadataUrl,
+    resource,
+}: BearerAuthMiddlewareOptions): RequestHandler {
+    // RFC 8707: resource identifiers must not include a fragment
+    const configuredResource = resource ? resourceUrlFromServerUrl(resource) : undefined;
+
     return async (req, res, next) => {
         try {
             const authHeader = req.headers.authorization;
@@ -68,7 +89,15 @@ export function requireBearerAuth({ verifier, requiredScopes = [], resourceMetad
                 throw new InvalidTokenError('Token has expired');
             }
 
-            // TODO validate token.resource
+            // Token audience validation: the token must have been issued for this resource
+            if (configuredResource) {
+                if (
+                    !authInfo.resource ||
+                    !checkResourceAllowed({ requestedResource: authInfo.resource, configuredResource: configuredResource })
+                ) {
+                    throw new InvalidTokenError(`Token was not issued for this resource: ${configuredResource.href}`);
+                }
+            }
 
             req.auth = authInfo;
             next();

@@ -102,6 +102,7 @@ function main() {
             verifier: mcpOAuthProvider,
             requiredScopes: ['mcp:tools'],
             resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
+            resource: mcpServerUrl,
         }),
     );
 

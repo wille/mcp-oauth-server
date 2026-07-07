@@ -53,6 +53,72 @@ describe('requireBearerAuth middleware', () => {
         expect(mockResponse.json).not.toHaveBeenCalled();
     });
 
+    describe('resource validation', () => {
+        function authInfoWithResource(resource?: string): AuthInfo {
+            return {
+                token: 'valid-token',
+                clientId: 'client-123',
+                scopes: ['read'],
+                expiresAt: Math.floor(Date.now() / 1000) + 3600,
+                resource: resource ? new URL(resource) : undefined,
+            };
+        }
+
+        beforeEach(() => {
+            mockRequest.headers = { authorization: 'Bearer valid-token' };
+        });
+
+        it('should call next when the token resource matches', async () => {
+            mockVerifyAccessToken.mockResolvedValue(authInfoWithResource('https://mcp.example.com/mcp'));
+
+            const middleware = requireBearerAuth({ verifier: mockVerifier, resource: new URL('https://mcp.example.com/mcp') });
+            await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+            expect(nextFunction).toHaveBeenCalled();
+            expect(mockResponse.status).not.toHaveBeenCalled();
+        });
+
+        it('should allow token resources under the configured resource path', async () => {
+            mockVerifyAccessToken.mockResolvedValue(authInfoWithResource('https://mcp.example.com/mcp/tenant1'));
+
+            const middleware = requireBearerAuth({ verifier: mockVerifier, resource: new URL('https://mcp.example.com/mcp') });
+            await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+            expect(nextFunction).toHaveBeenCalled();
+        });
+
+        it('should reject tokens issued for a different resource', async () => {
+            mockVerifyAccessToken.mockResolvedValue(authInfoWithResource('https://other.example.com/mcp'));
+
+            const middleware = requireBearerAuth({ verifier: mockVerifier, resource: new URL('https://mcp.example.com/mcp') });
+            await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+            expect(nextFunction).not.toHaveBeenCalled();
+            expect(mockResponse.status).toHaveBeenCalledWith(401);
+            expect(mockResponse.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'invalid_token' }));
+        });
+
+        it('should reject tokens without a resource when resource is configured', async () => {
+            mockVerifyAccessToken.mockResolvedValue(authInfoWithResource(undefined));
+
+            const middleware = requireBearerAuth({ verifier: mockVerifier, resource: new URL('https://mcp.example.com/mcp') });
+            await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+            expect(nextFunction).not.toHaveBeenCalled();
+            expect(mockResponse.status).toHaveBeenCalledWith(401);
+            expect(mockResponse.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'invalid_token' }));
+        });
+
+        it('should not validate the token resource when the option is omitted', async () => {
+            mockVerifyAccessToken.mockResolvedValue(authInfoWithResource(undefined));
+
+            const middleware = requireBearerAuth({ verifier: mockVerifier });
+            await middleware(mockRequest as Request, mockResponse as Response, nextFunction);
+
+            expect(nextFunction).toHaveBeenCalled();
+        });
+    });
+
     it.each([
         [100], // Token expired 100 seconds ago
         [0], // Token expires at the same time as now
