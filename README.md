@@ -5,12 +5,21 @@
 
 # mcp-oauth-server
 
-Standalone OAuth 2.1 Authorization Server implementation built to support the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization), with no runtime dependency on the MCP SDK.
+Self-hosted OAuth 2.1 Authorization Server for MCP servers, as Express middleware in TypeScript. Implements the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization) so you can protect your MCP server with OAuth without depending on a hosted auth vendor - and with no runtime dependency on the MCP SDK.
 
 Originally forked from the (now sunset) OAuth 2.1 Authorization Server implementation in [@modelcontextprotocol/typescript-sdk](https://github.com/modelcontextprotocol/typescript-sdk).
 
+## When to use this package
+
+- You are building a **remote MCP server** and need an **OAuth authorization server** that MCP clients (Claude, ChatGPT, VS Code, ...) can register against and obtain tokens from - with your own login/consent screen and your own storage.
+- You want the authorization server and the protected MCP server (resource server) in one Express app, or split across services sharing an `OAuthServerModel`.
+- You need the client registration mechanisms MCP clients actually use: Client ID Metadata Documents and Dynamic Client Registration.
+
+If you only need to **validate** tokens issued by an external identity provider, you don't need the full server - use [`requireBearerAuth`](#requirebearerauth) with a custom verifier.
+
 ## Table of Contents
 
+- [When to use this package](#when-to-use-this-package)
 - [Installation](#installation)
 - [Features](#features)
 - [OAuth client credentials](#oauth-client-credentials-machine-to-machine)
@@ -142,7 +151,46 @@ Fetched documents are cached through your `OAuthServerModel` (`saveClientIdMetad
 
 ## Quick Start
 
-A working MCP OAuth example with a memory-backed authorization server lives in [`./example`](example).
+A minimal MCP authorization server protecting an MCP endpoint:
+
+```ts
+import express from 'express';
+import { OAuthServer, mcpAuthRouter, requireBearerAuth, getOAuthProtectedResourceMetadataUrl } from 'mcp-oauth-server';
+
+const mcpServerUrl = new URL('https://example.com/mcp');
+
+const oauthServer = new OAuthServer({
+    issuerUrl: new URL('https://example.com'),
+    authorizationUrl: new URL('https://example.com/consent'), // your login/consent page
+    scopesSupported: ['mcp:tools'],
+    clientIdMetadataDocuments: true,
+});
+
+const app = express();
+
+// OAuth endpoints: /.well-known metadata, /authorize, /token, /register, /revoke
+app.use(mcpAuthRouter({ provider: oauthServer, resourceServerUrl: mcpServerUrl }));
+
+// Your protected MCP endpoint
+app.post(
+    '/mcp',
+    requireBearerAuth({
+        verifier: oauthServer,
+        requiredScopes: ['mcp:tools'],
+        resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(mcpServerUrl),
+        resource: mcpServerUrl,
+    }),
+    (req, res) => {
+        // req.auth is the validated token: clientId, userId, scopes
+    },
+);
+
+app.listen(3000);
+```
+
+Your consent page completes the flow by calling [`authenticateHandler`](#authenticatehandler) with the authenticated user id.
+
+A complete runnable example with a memory-backed authorization server and consent screen lives in [`./example`](example).
 
 **Run the demo**
 

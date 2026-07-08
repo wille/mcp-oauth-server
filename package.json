@@ -1,7 +1,7 @@
 {
   "name": "mcp-oauth-server",
   "version": "0.0.5",
-  "description": "MCP first OAuth 2.1 Authorization Server",
+  "description": "Self-hosted OAuth 2.1 Authorization Server for MCP servers (Express/TypeScript). Implements the MCP Authorization spec: Client ID Metadata Documents (CIMD), Dynamic Client Registration, PKCE, resource indicators, device flow.",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
   "packageManager": "pnpm@10.22.0",
@@ -67,6 +67,9 @@
     "device-flow",
     "cimd",
     "express",
+    "mcp-server",
+    "mcp-authorization",
+    "dynamic-client-registration",
     "modelcontextprotocol"
   ]
 }
