@@ -185,10 +185,17 @@ describe('OAuthServer CIMD integration', () => {
         await expect(server.getClient(CLIENT_ID)).rejects.toThrow('Unsupported token_endpoint_auth_method');
     });
 
-    it('rejects documents requesting grants the server has not enabled', async () => {
+    it('does not reject or filter documents mixing supported and unsupported grant_types', async () => {
         const { server } = createServer({ ...validDocument, grant_types: ['authorization_code', 'client_credentials'] });
 
-        await expect(server.getClient(CLIENT_ID)).rejects.toThrow('Unsupported grant_type');
+        const client = await server.getClient(CLIENT_ID);
+        expect(client?.grant_types).toEqual(['authorization_code', 'client_credentials']);
+    });
+
+    it('rejects documents where no grant_type is supported by the server', async () => {
+        const { server } = createServer({ ...validDocument, grant_types: ['client_credentials'] });
+
+        await expect(server.getClient(CLIENT_ID)).rejects.toThrow('No supported grant_types');
     });
 
     it('falls through to the model when CIMD is disabled', async () => {
@@ -297,6 +304,104 @@ describe('OAuthServer CIMD integration', () => {
         const location = new URL(response.header.location);
         expect(location.pathname).toBe('/consent');
         expect(location.searchParams.get('client_id')).toBe(CLIENT_ID);
+    });
+});
+
+describe('real-world client metadata documents', () => {
+    // Documents captured verbatim from their live URLs on 2026-07-08.
+
+    const claudeWebDocument = {
+        client_id: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
+        client_name: 'Claude',
+        client_uri: 'https://claude.ai',
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        grant_types: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+    };
+
+    const claudeCodeDocument = {
+        client_id: 'https://claude.ai/oauth/claude-code-client-metadata',
+        client_name: 'Claude Code',
+        client_uri: 'https://claude.ai',
+        redirect_uris: ['http://localhost/callback', 'http://127.0.0.1/callback'],
+        grant_types: ['authorization_code', 'refresh_token'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+    };
+
+    const vscodeDocument = {
+        client_name: 'Visual Studio Code',
+        logo_uri: 'https://code.visualstudio.com/assets/branding/code-stable.png',
+        grant_types: ['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code'],
+        response_types: ['code'],
+        token_endpoint_auth_method: 'none',
+        application_type: 'native',
+        client_id: 'https://vscode.dev/oauth/client-metadata.json',
+        client_uri: 'https://vscode.dev/product',
+        redirect_uris: ['http://127.0.0.1:33418/', 'https://vscode.dev/redirect'],
+    };
+
+    function createServer(document: { client_id: string }) {
+        return new OAuthServer({
+            model: new MemoryOAuthServerModel(),
+            issuerUrl: new URL('https://auth.example.com'),
+            authorizationUrl: new URL('https://auth.example.com/consent'),
+            scopesSupported: ['mcp:tools'],
+            clientIdMetadataDocuments: { fetch: mockFetch(document) },
+        });
+    }
+
+    it('resolves https://claude.ai/oauth/mcp-oauth-client-metadata with the jwt-bearer grant intact', async () => {
+        const server = createServer(claudeWebDocument);
+
+        const client = await server.getClient(claudeWebDocument.client_id);
+
+        expect(client?.client_name).toBe('Claude');
+        expect(client?.redirect_uris).toEqual(['https://claude.ai/api/mcp/auth_callback']);
+        expect(client?.grant_types).toEqual(['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:jwt-bearer']);
+    });
+
+    it('resolves https://claude.ai/oauth/claude-code-client-metadata', async () => {
+        const server = createServer(claudeCodeDocument);
+
+        const client = await server.getClient(claudeCodeDocument.client_id);
+
+        expect(client?.client_name).toBe('Claude Code');
+        expect(client?.grant_types).toEqual(['authorization_code', 'refresh_token']);
+    });
+
+    it('authorizes claude-code with an ephemeral loopback port (RFC 8252)', async () => {
+        // The document registers portless loopback redirect URIs; the client binds a
+        // random port at runtime.
+        const server = createServer(claudeCodeDocument);
+        const app = express();
+        app.use('/authorize', authorizationHandler({ provider: server }));
+
+        const response = await supertest(app).get('/authorize').query({
+            client_id: claudeCodeDocument.client_id,
+            redirect_uri: 'http://localhost:51234/callback',
+            response_type: 'code',
+            code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+            code_challenge_method: 'S256',
+            resource: 'https://auth.example.com/mcp',
+        });
+
+        expect(response.status).toBe(302);
+        const location = new URL(response.header.location);
+        expect(location.pathname).toBe('/consent');
+        expect(location.searchParams.get('redirect_uri')).toBe('http://localhost:51234/callback');
+    });
+
+    it('resolves https://vscode.dev/oauth/client-metadata.json with application_type persisted', async () => {
+        const server = createServer(vscodeDocument);
+
+        const client = await server.getClient(vscodeDocument.client_id);
+
+        expect(client?.client_name).toBe('Visual Studio Code');
+        expect(client?.application_type).toBe('native');
+        expect(client?.redirect_uris).toEqual(['http://127.0.0.1:33418/', 'https://vscode.dev/redirect']);
+        expect(client?.grant_types).toEqual(['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:device_code']);
     });
 });
 

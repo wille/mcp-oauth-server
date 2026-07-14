@@ -134,10 +134,22 @@ describe('OAuthServer Client Registration', () => {
                 expect(registered.grant_types).toEqual(['authorization_code', 'client_credentials']);
             });
 
-            it('should throw error when grant_types array contains unsupported grant', async () => {
+            it('should accept a mix of supported and unsupported grants without filtering', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+                    response_types: ['code'],
+                    token_endpoint_auth_method: 'none' as const,
+                };
+
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.grant_types).toEqual(['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer']);
+            });
+
+            it('should throw error when no requested grant is supported', async () => {
+                const clientMetadata = {
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    grant_types: ['urn:ietf:params:oauth:grant-type:jwt-bearer'],
                     response_types: ['code'],
                     token_endpoint_auth_method: 'none' as const,
                 };
@@ -156,7 +168,7 @@ describe('OAuthServer Client Registration', () => {
                 expect(registered.grant_types).toEqual(['authorization_code']);
             });
 
-            it('should reject device grant when verificationUri is not configured', async () => {
+            it('should accept the device grant alongside supported grants when it is not enabled on the server', async () => {
                 const clientMetadata = {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
@@ -164,7 +176,8 @@ describe('OAuthServer Client Registration', () => {
                     token_endpoint_auth_method: 'none' as const,
                 };
 
-                await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported grant_type');
+                const registered = await oauthServer.registerClient!(clientMetadata);
+                expect(registered.grant_types).toEqual(['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE]);
             });
 
             it('should accept device grant when verificationUri is configured', async () => {

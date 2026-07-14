@@ -311,12 +311,12 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             if (this.clientIdMetadataDocumentFetcher && isClientIdMetadataDocumentUrl(clientId)) {
                 const cached = await this.model.getClientIdMetadataDocument!(clientId);
                 if (cached && cached.expiresAt > new Date()) {
-                    this.validateClientIdMetadataDocumentClient(cached.client);
+                    this.validateClientIdMetadataDocument(cached.client);
                     return cached.client;
                 }
 
                 const document = await this.clientIdMetadataDocumentFetcher.fetchClient(clientId);
-                this.validateClientIdMetadataDocumentClient(document.client);
+                this.validateClientIdMetadataDocument(document.client);
 
                 // An expiresAt in the past means the response forbade caching (Cache-Control no-store/no-cache)
                 if (document.expiresAt > new Date()) {
@@ -338,17 +338,21 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
      * configuration. CIMD clients are public clients: they cannot hold a client_secret, and
      * private_key_jwt authentication is not supported by this server.
      */
-    private validateClientIdMetadataDocumentClient(client: OAuthClientInformationFull): void {
+    private validateClientIdMetadataDocument(client: OAuthClientInformationFull): void {
         if (client.token_endpoint_auth_method && client.token_endpoint_auth_method !== 'none') {
             throw new InvalidClientError(
                 `Unsupported token_endpoint_auth_method for client_id metadata document client: ${client.token_endpoint_auth_method}`,
             );
         }
 
-        client.grant_types ||= ['authorization_code'];
-        const unsupportedGrant = client.grant_types.find((grant) => !this.grantTypes.includes(grant as OAuthGrantType));
-        if (unsupportedGrant) {
-            throw new InvalidClientError(`Unsupported grant_type in client_id metadata document: ${unsupportedGrant}`);
+        // A metadata document is global and static - its grant_types describe the client's
+        // capabilities across all authorization servers, not a demand on this one. Clients may
+        // advertise grants only used with other servers (e.g. urn:ietf:params:oauth:grant-type:jwt-bearer),
+        // so only reject when the client could not use any grant here at all; each flow
+        // checks its specific grant at usage time.
+        const grantTypes = client.grant_types?.length ? client.grant_types : ['authorization_code'];
+        if (!grantTypes.some((grant) => this.grantTypes.includes(grant as OAuthGrantType))) {
+            throw new InvalidClientError(`No supported grant_types in client_id metadata document: ${grantTypes.join(', ')}`);
         }
     }
 
@@ -380,7 +384,8 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 client_secret_expires_at: clientSecretExpiresAt,
             };
 
-            if (!client.grant_types?.length || !client.grant_types.every((grant) => this.grantTypes.includes(grant as OAuthGrantType))) {
+            const grantedGrants = client.grant_types?.filter((grant) => this.grantTypes.includes(grant as OAuthGrantType)) ?? [];
+            if (!grantedGrants.length) {
                 throw new UnsupportedGrantTypeError('Unsupported grant_type: ' + client.grant_types?.join(', '));
             }
 
