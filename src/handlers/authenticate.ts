@@ -43,7 +43,7 @@ const RequestAuthorizationParamsSchema = z.object({
 export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getUser }: AuthenticationHandlerOptions): RequestHandler {
     // Create a router to apply middleware
     const router = express.Router();
-    router.use(allowedMethods(['GET', 'POST']));
+    router.use(allowedMethods(['POST']));
     router.use(express.urlencoded({ extended: false }));
 
     // Apply rate limiting unless explicitly disabled
@@ -60,7 +60,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
         );
     }
 
-    router.all('/', async (req, res) => {
+    router.post('/', async (req, res) => {
         res.setHeader('Cache-Control', 'no-store');
 
         // In the authorization flow, errors are split into two categories:
