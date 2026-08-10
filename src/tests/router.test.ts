@@ -214,14 +214,13 @@ describe('MCP Auth Router', () => {
                         model: {
                             getClient: async () => undefined,
                             saveAuthorizationCode: async () => undefined,
-                            getAuthorizationCode: async () => undefined,
-                            revokeAuthorizationCode: async () => undefined,
+                            consumeAuthorizationCode: async () => undefined,
                             saveAccessToken: async () => undefined,
                             getAccessToken: async () => undefined,
                             revokeAccessToken: async () => undefined,
                             saveRefreshToken: async () => undefined,
-                            getRefreshToken: async () => undefined,
                             revokeRefreshToken: async () => undefined,
+                            consumeRefreshToken: async () => undefined,
                         },
                     }),
             ).toThrow('dynamic client registration is not supported by this authorization server');

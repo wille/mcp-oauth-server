@@ -268,10 +268,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             if (!this.authorizationUrl) {
                 throw new Error('authorization_code grant requires authorizationUrl');
             }
-            if (!m.saveAuthorizationCode || !m.getAuthorizationCode || !m.revokeAuthorizationCode) {
+            if (!m.saveAuthorizationCode || !m.consumeAuthorizationCode) {
                 throw new Error(
-                    'authorization_code grant requires OAuthServerModel methods: saveAuthorizationCode, getAuthorizationCode, revokeAuthorizationCode',
+                    'authorization_code grant requires OAuthServerModel methods: saveAuthorizationCode, consumeAuthorizationCode',
                 );
+            }
+        }
+
+        if (this.grantTypes.includes('refresh_token')) {
+            if (!m.consumeRefreshToken) {
+                throw new Error('refresh_token grant requires OAuthServerModel method: consumeRefreshToken');
             }
         }
 
@@ -283,10 +289,12 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 !m.saveDeviceAuthorization ||
                 !m.getDeviceAuthorizationByDeviceCode ||
                 !m.getDeviceAuthorizationByUserCode ||
-                !m.deleteDeviceAuthorization
+                !m.deleteDeviceAuthorization ||
+                !m.consumeApprovedDeviceAuthorization ||
+                !m.resolvePendingDeviceAuthorization
             ) {
                 throw new Error(
-                    'device_code grant requires OAuthServerModel device methods: saveDeviceAuthorization, getDeviceAuthorizationByDeviceCode, getDeviceAuthorizationByUserCode, deleteDeviceAuthorization',
+                    'device_code grant requires OAuthServerModel device methods: saveDeviceAuthorization, getDeviceAuthorizationByDeviceCode, getDeviceAuthorizationByUserCode, deleteDeviceAuthorization, consumeApprovedDeviceAuthorization, resolvePendingDeviceAuthorization',
                 );
             }
         }
@@ -506,19 +514,24 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new UnauthorizedClientError('Client is not authorized to use authorization_code grant');
             }
 
-            const codeData = await this.model.getAuthorizationCode!(authorizationCode);
+            // Fetching and invalidating the code in one atomic, client-scoped operation is
+            // what makes it single-use (OAuth 2.1 section 4.1.3): of any number of requests
+            // presenting this code concurrently, only one gets the record back and reaches
+            // the token issuance below. Requests from any other client consume nothing.
+            //
+            // Every check from here on burns the code instead of allowing a retry. That is
+            // deliberate - a failed code_verifier must not be retryable, or the challenge
+            // could be brute-forced one request at a time.
+            const codeData = await this.model.consumeAuthorizationCode!(authorizationCode, client.client_id);
             if (!codeData) {
+                // Unknown, already used, or issued to a different client. RFC 6749 section
+                // 5.2 maps all three to invalid_grant, and not saying which avoids
+                // confirming another client's code to the caller.
                 throw new InvalidGrantError('Invalid authorization code');
             }
 
             if (codeData.expiresAt < new Date()) {
                 throw new InvalidGrantError('Authorization code has expired');
-            }
-
-            if (codeData.clientId !== client.client_id) {
-                throw new InvalidGrantError(
-                    `Authorization code was not issued to this client, ${codeData.clientId} != ${client.client_id}`,
-                );
             }
 
             // OAuth 2.0 backwards compability
@@ -587,8 +600,6 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 resource,
             });
 
-            await this.model.revokeAuthorizationCode!(authorizationCode);
-
             return {
                 access_token: token,
                 refresh_token: newRefreshTokenData.token,
@@ -619,19 +630,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             if (!this.grantTypes.includes('refresh_token')) {
                 throw new UnsupportedGrantTypeError('refresh_token grant is not supported');
             }
-            const refreshTokenData = await this.model.getRefreshToken!(refreshToken);
+            // Rotated on every use, so the read must be atomic with the invalidation and
+            // scoped to the client for the same reasons as exchangeAuthorizationCode.
+            const refreshTokenData = await this.model.consumeRefreshToken!(refreshToken, client.client_id);
             if (!refreshTokenData) {
+                // Unknown, already used, or issued to a different client.
                 throw new InvalidGrantError('Invalid refresh token');
             }
 
             if (refreshTokenData.expiresAt < new Date()) {
                 throw new InvalidGrantError('Refresh token has expired');
-            }
-
-            if (refreshTokenData.clientId !== client.client_id) {
-                throw new InvalidGrantError(
-                    `Refresh token was not issued to this client, ${refreshTokenData.clientId} != ${client.client_id}`,
-                );
             }
 
             // The requested scope must not include additional scopes that were not issued in the original access token.
@@ -675,8 +683,6 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 resource: refreshTokenData.resource,
             };
             await this.model.saveRefreshToken(newRefreshTokenData, client);
-
-            await this.model.revokeRefreshToken(refreshToken);
 
             return {
                 access_token: newAccessToken.token,
@@ -881,7 +887,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             }
 
             if (device.status === 'approved') {
-                if (!device.userId) {
+                // Devices poll this endpoint on a timer, so two polls can arrive together the
+                // moment the user approves. Claiming the authorization atomically is what
+                // makes the device code single-use: the poll that loses gets undefined here
+                // rather than a second set of tokens.
+                const approved = await this.model.consumeApprovedDeviceAuthorization!(deviceCode, client.client_id);
+                if (!approved) {
+                    throw new InvalidGrantError('Invalid device code');
+                }
+
+                if (!approved.userId) {
                     throw new ServerError('Device authorization is missing user id');
                 }
 
@@ -889,33 +904,31 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 const tokenData: AccessToken = {
                     token,
                     clientId: client.client_id,
-                    userId: device.userId,
-                    scopes: device.scopes || [],
+                    userId: approved.userId,
+                    scopes: approved.scopes || [],
                     expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
-                    resource: device.resource,
+                    resource: approved.resource,
                 };
                 await this.model.saveAccessToken(tokenData, client);
 
                 const newRefreshTokenData: RefreshToken = {
                     token: this.generateToken(),
                     clientId: client.client_id,
-                    userId: device.userId,
-                    scopes: device.scopes || [],
+                    userId: approved.userId,
+                    scopes: approved.scopes || [],
                     expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
-                    resource: device.resource,
+                    resource: approved.resource,
                 };
                 await this.model.saveRefreshToken(newRefreshTokenData, client);
 
-                await this.model.deleteDeviceAuthorization!(deviceCode);
-
-                log('exchangeDeviceCode', { clientId: client.client_id, userId: device.userId });
+                log('exchangeDeviceCode', { clientId: client.client_id, userId: approved.userId });
 
                 return {
                     access_token: token,
                     refresh_token: newRefreshTokenData.token,
                     token_type: 'bearer',
                     expires_in: this.accessTokenLifetime,
-                    scope: (device.scopes || []).join(' '),
+                    scope: (approved.scopes || []).join(' '),
                 };
             }
 
@@ -957,15 +970,14 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new ExpiredTokenError('The device code has expired');
             }
 
-            if (device.status !== 'pending') {
+            // Atomic pending -> approved, so a simultaneous approve and deny cannot both
+            // believe they won and leave the outcome to whichever write landed last.
+            const approved = await this.model.resolvePendingDeviceAuthorization!(normalized, 'approved', userId);
+            if (!approved) {
                 throw new InvalidRequestError('Device authorization is no longer pending');
             }
 
-            device.status = 'approved';
-            device.userId = userId;
-            await this.model.saveDeviceAuthorization!(device);
-
-            log('approveDeviceAuthorization', { userId, clientId: device.clientId });
+            log('approveDeviceAuthorization', { userId, clientId: approved.clientId });
         } catch (error) {
             this.errorHandler('approveDeviceAuthorization', error, { userCode, userId });
             throw error;
@@ -992,14 +1004,13 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new ExpiredTokenError('The device code has expired');
             }
 
-            if (device.status !== 'pending') {
+            // Atomic pending -> denied. See approveDeviceAuthorization.
+            const denied = await this.model.resolvePendingDeviceAuthorization!(normalized, 'denied');
+            if (!denied) {
                 throw new InvalidRequestError('Device authorization is no longer pending');
             }
 
-            device.status = 'denied';
-            await this.model.saveDeviceAuthorization!(device);
-
-            log('denyDeviceAuthorization', { clientId: device.clientId });
+            log('denyDeviceAuthorization', { clientId: denied.clientId });
         } catch (error) {
             this.errorHandler('denyDeviceAuthorization', error, { userCode });
             throw error;

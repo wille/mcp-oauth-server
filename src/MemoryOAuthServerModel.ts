@@ -21,6 +21,12 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         this.authorizationCodes.set(params.authorizationCode, params);
     }
 
+    /**
+     * Read a code without consuming it.
+     *
+     * Not part of {@link OAuthServerModel} and never called by the library - the flows only
+     * ever consume. Kept here for tests and local introspection.
+     */
     async getAuthorizationCode(authorizationCode: string): Promise<AuthorizationCode | undefined> {
         return this.authorizationCodes.get(authorizationCode);
     }
@@ -31,6 +37,21 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
     async revokeAuthorizationCode(authorizationCode: string): Promise<void> {
         this.authorizationCodes.delete(authorizationCode);
+    }
+
+    /**
+     * Atomic because the lookup and the delete share one synchronous block: there is no
+     * await between them, so no other task can observe the code in between. A store that
+     * talks to a database must get this from the database instead - see
+     * {@link OAuthServerModel.consumeAuthorizationCode}.
+     */
+    async consumeAuthorizationCode(authorizationCode: string, clientId: string): Promise<AuthorizationCode | undefined> {
+        const code = this.authorizationCodes.get(authorizationCode);
+        if (!code || code.clientId !== clientId) {
+            return undefined;
+        }
+        this.authorizationCodes.delete(authorizationCode);
+        return code;
     }
 
     async getAccessToken(accessToken: string): Promise<AccessToken | undefined> {
@@ -45,12 +66,23 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         this.refreshTokens.set(token.token, token);
     }
 
+    /** Read a refresh token without consuming it. Introspection only, like {@link getAuthorizationCode}. */
     async getRefreshToken(refreshToken: string): Promise<RefreshToken | undefined> {
         return this.refreshTokens.get(refreshToken);
     }
 
     async revokeRefreshToken(refreshToken: string): Promise<void> {
         this.refreshTokens.delete(refreshToken);
+    }
+
+    /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
+    async consumeRefreshToken(refreshToken: string, clientId: string): Promise<RefreshToken | undefined> {
+        const token = this.refreshTokens.get(refreshToken);
+        if (!token || token.clientId !== clientId) {
+            return undefined;
+        }
+        this.refreshTokens.delete(refreshToken);
+        return token;
     }
 
     async getClient(clientId: string) {
@@ -99,5 +131,34 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
             this.deviceCodeByUserCode.delete(normalizeDeviceUserCode(device.userCode));
         }
         this.deviceByDeviceCode.delete(deviceCode);
+    }
+
+    /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
+    async consumeApprovedDeviceAuthorization(deviceCode: string, clientId: string): Promise<DeviceAuthorization | undefined> {
+        const device = this.deviceByDeviceCode.get(deviceCode);
+        if (!device || device.clientId !== clientId || device.status !== 'approved') {
+            return undefined;
+        }
+        this.deviceByDeviceCode.delete(deviceCode);
+        this.deviceCodeByUserCode.delete(normalizeDeviceUserCode(device.userCode));
+        return device;
+    }
+
+    /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
+    async resolvePendingDeviceAuthorization(
+        normalizedUserCode: string,
+        status: 'approved' | 'denied',
+        userId?: string,
+    ): Promise<DeviceAuthorization | undefined> {
+        const deviceCode = this.deviceCodeByUserCode.get(normalizedUserCode);
+        const device = deviceCode ? this.deviceByDeviceCode.get(deviceCode) : undefined;
+        if (!device || device.status !== 'pending') {
+            return undefined;
+        }
+        device.status = status;
+        if (userId !== undefined) {
+            device.userId = userId;
+        }
+        return device;
     }
 }

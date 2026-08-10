@@ -27,11 +27,11 @@ If you only need to **validate** tokens issued by an external identity provider,
 - [Client ID Metadata Documents (CIMD)](#client-id-metadata-documents-cimd)
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
-  - [OAuthServer](#oauthserver)
-  - [OAuthServerModel](#oauthservermodel)
-  - [mcpAuthRouter](#mcpauthrouter)
-  - [authenticateHandler](#authenticatehandler)
-  - [requireBearerAuth](#requirebearerauth)
+    - [OAuthServer](#oauthserver)
+    - [OAuthServerModel](#oauthservermodel)
+    - [mcpAuthRouter](#mcpauthrouter)
+    - [authenticateHandler](#authenticatehandler)
+    - [requireBearerAuth](#requirebearerauth)
 
 ## Installation
 
@@ -107,7 +107,7 @@ const oauthServer = new OAuthServer({
 });
 ```
 
-3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`) - see `MemoryOAuthServerModel` for a reference.
+3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization`) - see `MemoryOAuthServerModel` for a reference.
 
 The auth router exposes **`POST /device`** (under your AS base path) when the device grant and `deviceAuthorizationUrl` are configured. Metadata lists `device_authorization_endpoint` accordingly.
 
@@ -196,15 +196,15 @@ A complete runnable example with a memory-backed authorization server and consen
 
 1. Start the server:
 
-   ```bash
-   pnpm example:server
-   ```
+    ```bash
+    pnpm example:server
+    ```
 
 2. In another terminal, authenticate with the server:
 
-   ```bash
-   pnpm example:client
-   ```
+    ```bash
+    pnpm example:client
+    ```
 
 The example covers mounting the OAuth router, a simple consent screen, and confirming authorization.
 
@@ -276,10 +276,20 @@ export class PostgresModel implements OAuthServerModel {
 
 - `getClient`: (required) Resolve a registered client by id.
 - `registerClient`: (required if `dynamicClientRegistration` is true) Persist dynamic registration.
-- Authorization code grant: `saveAuthorizationCode`, `getAuthorizationCode`, `revokeAuthorizationCode` when `authorization_code` is enabled.
-- Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization` when the device grant is enabled.
+- Authorization code grant: `saveAuthorizationCode`, `consumeAuthorizationCode` when `authorization_code` is enabled.
+- `consumeAuthorizationCode` and `consumeRefreshToken` (the latter required when `refresh_token` is enabled) must fetch **and** invalidate the record in a single atomic operation, matching on the client id, and return `undefined` if there is no match:
+
+    ```sql
+    DELETE FROM authorization_codes WHERE code = $1 AND client_id = $2 RETURNING *
+    ```
+
+    Atomicity is what makes the grant single-use (OAuth 2.1 §4.1.3): a read followed by a separate delete lets two concurrent requests each be issued their own tokens. Matching on the client id in the same statement means a request from the wrong client consumes nothing, so it cannot invalidate a grant another client is about to redeem.
+
+- Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization` when the device grant is enabled. The last two carry the same atomicity requirement: a device code must yield tokens to only one poll, and a pending authorization must move to `approved` or `denied` exactly once.
 - CIMD: `saveClientIdMetadataDocument`, `getClientIdMetadataDocument` when [`clientIdMetadataDocuments`](#client-id-metadata-documents-cimd) is enabled.
-- Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `getRefreshToken`, `revokeRefreshToken`.
+- Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `revokeRefreshToken`.
+
+There is deliberately no `getAuthorizationCode` or `getRefreshToken` in the interface: the grant flows only ever consume, and a plain read next to a consume is the shape that reintroduces the race. `MemoryOAuthServerModel` still offers both for local introspection.
 
 ### mcpAuthRouter
 

@@ -135,9 +135,12 @@ describe('OAuthServer.exchangeRefreshToken', () => {
 
         await model.saveRefreshToken(refreshToken, client);
 
-        await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-wrong-client')).rejects.toThrow(
-            'Refresh token was not issued to this client',
-        );
+        // A refresh token belonging to another client is not distinguishable from an unknown
+        // one: consumeRefreshToken matches on client_id, so this client consumes nothing.
+        await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-wrong-client')).rejects.toThrow('Invalid refresh token');
+
+        // ...and the token survives for the client it was issued to.
+        expect(await model.getRefreshToken('refresh-token-wrong-client')).toBeDefined();
     });
 
     it('should throw error when requesting invalid scopes', async () => {

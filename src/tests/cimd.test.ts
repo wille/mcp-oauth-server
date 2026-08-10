@@ -214,11 +214,10 @@ describe('OAuthServer CIMD integration', () => {
             getAccessToken: async () => undefined,
             revokeAccessToken: async () => {},
             saveRefreshToken: async () => {},
-            getRefreshToken: async () => undefined,
             revokeRefreshToken: async () => {},
+            consumeRefreshToken: async () => undefined,
             saveAuthorizationCode: async () => {},
-            getAuthorizationCode: async () => undefined,
-            revokeAuthorizationCode: async () => {},
+            consumeAuthorizationCode: async () => undefined,
         };
 
         expect(
