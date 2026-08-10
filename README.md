@@ -288,6 +288,7 @@ export class PostgresModel implements OAuthServerModel {
 - Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization` when the device grant is enabled. The last two carry the same atomicity requirement: a device code must yield tokens to only one poll, and a pending authorization must move to `approved` or `denied` exactly once.
 - CIMD: `saveClientIdMetadataDocument`, `getClientIdMetadataDocument` when [`clientIdMetadataDocuments`](#client-id-metadata-documents-cimd) is enabled.
 - Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `revokeRefreshToken`.
+- `revokeAccessToken` and `revokeRefreshToken` take the requesting client's id and **must only revoke a token issued to that client** (`DELETE ... WHERE token = $1 AND client_id = $2`). RFC 7009 §2.1 requires the revocation endpoint to verify ownership; letting the store decide keeps §2.2's "always answer 200" rule intact, so revocation cannot be used to probe for another client's tokens. Never throw when nothing matches.
 
 There is deliberately no `getAuthorizationCode` or `getRefreshToken` in the interface: the grant flows only ever consume, and a plain read next to a consume is the shape that reintroduces the race. `MemoryOAuthServerModel` still offers both for local introspection.
 

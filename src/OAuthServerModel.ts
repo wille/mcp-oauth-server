@@ -87,10 +87,29 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
 
     saveAccessToken(token: AccessToken, client: OAuthClientInformationFull): Promise<void>;
     getAccessToken(accessToken: string): Promise<AccessToken | undefined>;
-    revokeAccessToken(accessToken: string): Promise<void>;
+
+    /**
+     * Revoke an access token, but only if it was issued to `clientId`. Tokens belonging to
+     * any other client MUST be left untouched:
+     *
+     * ```sql
+     * DELETE FROM access_tokens WHERE token = $1 AND client_id = $2
+     * ```
+     *
+     * RFC 7009 section 2.1 requires the revocation endpoint to verify that the token was
+     * issued to the client making the request. Enforcing it here rather than by reading the
+     * token first is what lets the endpoint answer 200 whether or not anything was revoked,
+     * as section 2.2 requires - so a client cannot use it to discover whether someone
+     * else's token exists.
+     *
+     * Do not throw when nothing matches; there is nothing for the caller to report.
+     */
+    revokeAccessToken(accessToken: string, clientId: string): Promise<void>;
 
     saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void>;
-    revokeRefreshToken(refreshToken: string): Promise<void>;
+
+    /** Revoke a refresh token, scoped to `clientId` exactly as {@link revokeAccessToken} is. */
+    revokeRefreshToken(refreshToken: string, clientId: string): Promise<void>;
 
     /**
      * Fetch a refresh token and invalidate it in the same atomic operation, but only if it

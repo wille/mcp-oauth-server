@@ -773,22 +773,23 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         try {
             const hint = request.token_type_hint;
 
+            if (hint !== undefined && hint !== 'access_token' && hint !== 'refresh_token') {
+                throw new InvalidRequestError('Unsupported token_type_hint');
+            }
+
             log('revokeToken', { client, request });
 
-            switch (hint) {
-                case 'access_token':
-                    await this.model.revokeAccessToken(request.token);
-                    break;
-                case 'refresh_token':
-                    await this.model.revokeRefreshToken(request.token);
-                    break;
-                case undefined:
-                    await this.model.revokeAccessToken(request.token);
-                    await this.model.revokeRefreshToken(request.token);
-                    break;
-                default:
-                    throw new InvalidRequestError('Unsupported token_type_hint');
-            }
+            // token_type_hint is only a hint. RFC 7009 section 2.1 requires the search to
+            // extend across every supported token type when the hint fails to locate the
+            // token, so both stores are asked regardless of what the client guessed.
+            //
+            // Both calls are scoped to the authenticated client, which is the ownership
+            // check the same section requires. Because the store decides whether anything
+            // matches, this method reports nothing either way and the endpoint answers 200
+            // as section 2.2 requires - revocation cannot be used to probe for the
+            // existence of another client's token.
+            await this.model.revokeAccessToken(request.token, client.client_id);
+            await this.model.revokeRefreshToken(request.token, client.client_id);
         } catch (error) {
             this.errorHandler('revokeToken', error, { client, request });
             throw error;

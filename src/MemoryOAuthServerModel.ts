@@ -58,8 +58,11 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         return this.accessTokens.get(accessToken);
     }
 
-    async revokeAccessToken(accessToken: string): Promise<void> {
-        this.accessTokens.delete(accessToken);
+    async revokeAccessToken(accessToken: string, clientId: string): Promise<void> {
+        const token = this.accessTokens.get(accessToken);
+        if (token?.clientId === clientId) {
+            this.accessTokens.delete(accessToken);
+        }
     }
 
     async saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void> {
@@ -71,8 +74,11 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         return this.refreshTokens.get(refreshToken);
     }
 
-    async revokeRefreshToken(refreshToken: string): Promise<void> {
-        this.refreshTokens.delete(refreshToken);
+    async revokeRefreshToken(refreshToken: string, clientId: string): Promise<void> {
+        const token = this.refreshTokens.get(refreshToken);
+        if (token?.clientId === clientId) {
+            this.refreshTokens.delete(refreshToken);
+        }
     }
 
     /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
