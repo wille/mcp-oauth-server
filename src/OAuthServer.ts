@@ -10,7 +10,7 @@ import {
 import { Response } from 'express';
 import { AuthInfo } from './types.js';
 import { checkResourceAllowed, resourceUrlFromServerUrl } from './resource-uri.js';
-import { redirectUriMatches } from './redirect-uri.js';
+import { isSecureRedirectUri, redirectUriMatches } from './redirect-uri.js';
 import {
     CustomOAuthError,
     AccessDeniedError,
@@ -191,6 +191,25 @@ export interface OAuthServerOptions {
     dynamicClientRegistration?: boolean;
 
     /**
+     * Accept client redirect URIs that would carry the authorization response over cleartext
+     * http, which OAuth 2.1 §2.3.1 forbids.
+     *
+     * Loopback redirects (`http://127.0.0.1:1234/cb`, RFC 8252 §7.3) and private-use URI
+     * schemes (`com.example.app:/cb`, `vscode://...`, RFC 8252 §7.1) are always accepted and
+     * unaffected by this setting - neither crosses a network. What this permits is an `http`
+     * URI on a routable host, where anyone on the network path can read the authorization
+     * code out of the redirect and, absent PKCE, redeem it.
+     *
+     * Applies to the two paths where a client's redirect URIs come from outside: dynamic
+     * client registration and Client ID Metadata Documents. Clients your own
+     * {@link OAuthServerModel} returns are not inspected.
+     *
+     * @default false
+     * @see {@link isSecureRedirectUri}
+     */
+    allowInsecureRedirectUris?: boolean;
+
+    /**
      * Enable OAuth Client ID Metadata Documents (CIMD): clients use an HTTPS URL as their
      * `client_id` and this server fetches the client metadata from that URL.
      *
@@ -225,6 +244,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     errorHandler: ErrorHandler;
     grantTypes: OAuthGrantType[];
     dynamicClientRegistration: boolean;
+    allowInsecureRedirectUris: boolean;
     clientIdMetadataDocumentFetcher?: ClientIdMetadataDocumentFetcher;
 
     deviceAuthorizationUrl?: URL;
@@ -249,6 +269,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         this.devicePollIntervalSeconds = options.devicePollIntervalSeconds ?? 5;
         this.grantTypes = options.grantTypes ?? DEFAULT_GRANT_TYPES;
         this.dynamicClientRegistration = options.dynamicClientRegistration ?? true;
+        this.allowInsecureRedirectUris = options.allowInsecureRedirectUris ?? false;
         if (options.clientIdMetadataDocuments) {
             this.clientIdMetadataDocumentFetcher = new ClientIdMetadataDocumentFetcher(
                 typeof options.clientIdMetadataDocuments === 'object' ? options.clientIdMetadataDocuments : {},
@@ -347,6 +368,12 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
      * private_key_jwt authentication is not supported by this server.
      */
     private validateClientIdMetadataDocument(client: OAuthClientInformationFull): void {
+        this.validateRedirectUris(client.redirect_uris, (uri) => {
+            throw new InvalidClientError(
+                `redirect_uri in client_id metadata document must use https, a loopback address, or a private-use URI scheme: ${uri}`,
+            );
+        });
+
         if (client.token_endpoint_auth_method && client.token_endpoint_auth_method !== 'none') {
             throw new InvalidClientError(
                 `Unsupported token_endpoint_auth_method for client_id metadata document client: ${client.token_endpoint_auth_method}`,
@@ -369,6 +396,14 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             if (!this.model.registerClient) {
                 throw new UnsupportedGrantTypeError('dynamic client registration is not supported by this authorization server');
             }
+
+            this.validateRedirectUris(clientMetadata.redirect_uris, (uri) => {
+                // RFC 7591 section 3.2.2 error code for a rejected redirect URI.
+                throw new CustomOAuthError(
+                    'invalid_redirect_uri',
+                    `redirect_uri must use https, a loopback address, or a private-use URI scheme: ${uri}`,
+                );
+            });
 
             const isPublicClient = clientMetadata.token_endpoint_auth_method === 'none';
 
@@ -1020,6 +1055,25 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
     private generateToken(): string {
         return crypto.randomBytes(32).toString('base64');
+    }
+
+    /**
+     * Rejects redirect URIs that would carry the authorization response over cleartext http,
+     * per OAuth 2.1 §2.3.1, unless {@link allowInsecureRedirectUris} is set.
+     *
+     * The caller supplies `reject` because the two registration paths report this with
+     * different error codes: RFC 7591 defines `invalid_redirect_uri` for dynamic
+     * registration, while a Client ID Metadata Document failure is an `invalid_client`.
+     */
+    private validateRedirectUris(redirectUris: string[], reject: (uri: string) => never): void {
+        if (this.allowInsecureRedirectUris) {
+            return;
+        }
+
+        const insecure = redirectUris.find((uri) => !isSecureRedirectUri(uri));
+        if (insecure !== undefined) {
+            reject(insecure);
+        }
     }
 
     /**

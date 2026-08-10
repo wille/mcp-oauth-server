@@ -190,6 +190,35 @@ describe('ClientIdMetadataDocumentFetcher', () => {
         expect(document.client.client_name).toBe('Ünicode Client 🔐');
     });
 
+    it('rejects a document whose redirect_uri would use cleartext http', async () => {
+        // OAuth 2.1 §2.3.1 applies to CIMD clients too: the document is fetched over https,
+        // but that says nothing about where the authorization response would be sent.
+        const server = new OAuthServer({
+            model: new MemoryOAuthServerModel(),
+            authorizationUrl: new URL('https://auth.example.com/consent'),
+            dynamicClientRegistration: false,
+            clientIdMetadataDocuments: {
+                fetch: mockFetch({ ...validDocument, redirect_uris: ['http://app.example.com/callback'] }),
+            },
+        });
+
+        await expect(server.getClient(CLIENT_ID)).rejects.toThrow('must use https, a loopback address, or a private-use URI scheme');
+    });
+
+    it('accepts a document with a loopback redirect_uri', async () => {
+        const server = new OAuthServer({
+            model: new MemoryOAuthServerModel(),
+            authorizationUrl: new URL('https://auth.example.com/consent'),
+            dynamicClientRegistration: false,
+            clientIdMetadataDocuments: {
+                fetch: mockFetch({ ...validDocument, redirect_uris: ['http://127.0.0.1:49152/callback'] }),
+            },
+        });
+
+        const client = await server.getClient(CLIENT_ID);
+        expect(client!.redirect_uris).toEqual(['http://127.0.0.1:49152/callback']);
+    });
+
     it('rejects loopback and IP-literal hosts without fetching', async () => {
         const fetch = mockFetch(validDocument);
         const fetcher = new ClientIdMetadataDocumentFetcher({ fetch });

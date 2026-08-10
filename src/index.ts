@@ -20,7 +20,7 @@ export { AuthorizationPendingError, SlowDownError, ExpiredTokenError, InvalidReq
 export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter } from './router.js';
 export { requireBearerAuth } from './middleware/bearerAuth.js';
 export { checkResourceAllowed } from './resource-uri.js';
-export { redirectUriMatches } from './redirect-uri.js';
+export { redirectUriMatches, isSecureRedirectUri } from './redirect-uri.js';
 export { isClientIdMetadataDocumentUrl, ClientIdMetadataDocumentFetcher } from './cimd.js';
 export type { ClientIdMetadataDocumentOptions } from './cimd.js';
 export * from './schemas.js';

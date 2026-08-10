@@ -17,6 +17,49 @@ describe('OAuthServer Client Registration', () => {
         });
     });
 
+    describe('redirect URI transport security (OAuth 2.1 §2.3.1)', () => {
+        const register = (server: OAuthServer, redirect_uris: string[]) =>
+            server.registerClient!({ redirect_uris, grant_types: ['authorization_code'], token_endpoint_auth_method: 'none' });
+
+        it('rejects a cleartext http redirect URI', async () => {
+            await expect(register(oauthServer, ['http://app.example.com/callback'])).rejects.toMatchObject({
+                errorCode: 'invalid_redirect_uri',
+            });
+        });
+
+        it('rejects a client whose redirect URIs are only partly secure', async () => {
+            await expect(
+                register(oauthServer, ['https://app.example.com/callback', 'http://app.example.com/callback']),
+            ).rejects.toMatchObject({ errorCode: 'invalid_redirect_uri' });
+        });
+
+        it('accepts https, loopback and private-use schemes', async () => {
+            for (const uri of [
+                'https://app.example.com/callback',
+                'http://127.0.0.1:49152/callback',
+                'http://[::1]:49152/callback',
+                'http://localhost:3000/callback',
+                'com.example.app:/oauth2redirect',
+                'vscode://example.extension/callback',
+            ]) {
+                const client = await register(oauthServer, [uri]);
+                expect(client.redirect_uris).toEqual([uri]);
+            }
+        });
+
+        it('accepts cleartext http when allowInsecureRedirectUris is set', async () => {
+            const permissive = new OAuthServer({
+                model: new MemoryOAuthServerModel(),
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                allowInsecureRedirectUris: true,
+            });
+
+            const client = await register(permissive, ['http://app.example.com/callback']);
+            expect(client.redirect_uris).toEqual(['http://app.example.com/callback']);
+        });
+    });
+
     describe('registerClient', () => {
         it('should successfully register a client with all required fields', async () => {
             const clientMetadata = {

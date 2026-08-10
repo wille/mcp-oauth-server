@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { redirectUriMatches } from '../redirect-uri.js';
+import { isSecureRedirectUri, redirectUriMatches } from '../redirect-uri.js';
 
 describe('redirectUriMatches', () => {
     it('matches identical URIs', () => {
@@ -48,5 +48,41 @@ describe('redirectUriMatches', () => {
     it('rejects unparseable URIs', () => {
         expect(redirectUriMatches('not-a-url', 'http://localhost:3000/callback')).toBe(false);
         expect(redirectUriMatches('http://localhost:3000/callback', 'not-a-url')).toBe(false);
+    });
+});
+
+/**
+ * OAuth 2.1 §2.3.1 requires TLS for redirect URIs, with the RFC 8252 exceptions for URIs
+ * that never cross a network.
+ */
+describe('isSecureRedirectUri', () => {
+    it('accepts https', () => {
+        expect(isSecureRedirectUri('https://app.example.com/callback')).toBe(true);
+        expect(isSecureRedirectUri('https://app.example.com:8443/callback?x=1')).toBe(true);
+    });
+
+    it('rejects cleartext http on a routable host', () => {
+        expect(isSecureRedirectUri('http://app.example.com/callback')).toBe(false);
+        expect(isSecureRedirectUri('http://203.0.113.10/callback')).toBe(false);
+        expect(isSecureRedirectUri('http://localhost.evil.example.com/callback')).toBe(false);
+    });
+
+    it('accepts http on the loopback interface (RFC 8252 §7.3)', () => {
+        expect(isSecureRedirectUri('http://127.0.0.1:49152/callback')).toBe(true);
+        expect(isSecureRedirectUri('http://[::1]:49152/callback')).toBe(true);
+        expect(isSecureRedirectUri('http://localhost:3000/callback')).toBe(true);
+    });
+
+    it('accepts private-use URI schemes (RFC 8252 §7.1)', () => {
+        expect(isSecureRedirectUri('com.example.app:/oauth2redirect')).toBe(true);
+        expect(isSecureRedirectUri('com.example.app:/oauth2redirect/callback')).toBe(true);
+        // Schemes real MCP clients use, which are not reverse-domain form.
+        expect(isSecureRedirectUri('vscode://example.extension/callback')).toBe(true);
+        expect(isSecureRedirectUri('cursor://anysphere.mcp/callback')).toBe(true);
+    });
+
+    it('rejects unparseable URIs', () => {
+        expect(isSecureRedirectUri('not-a-url')).toBe(false);
+        expect(isSecureRedirectUri('')).toBe(false);
     });
 });
