@@ -129,6 +129,67 @@ describe('ClientIdMetadataDocumentFetcher', () => {
         await expect(fetcher.fetchClient(CLIENT_ID)).rejects.toThrow('too large');
     });
 
+    it('stops reading an oversized body instead of buffering all of it', async () => {
+        // A chunked response carries no content-length, so the size limit can only be applied
+        // while reading. This stream would happily produce 64 MB; the fetcher must abandon it
+        // shortly after the 10 KB cap rather than hold the whole thing in memory.
+        const CHUNK = 64 * 1024;
+        const TOTAL = 64 * 1024 * 1024;
+        let produced = 0;
+
+        const endless = new ReadableStream<Uint8Array>({
+            pull(controller) {
+                if (produced >= TOTAL) {
+                    controller.close();
+                    return;
+                }
+                produced += CHUNK;
+                controller.enqueue(new Uint8Array(CHUNK).fill(0x78)); // 'x'
+            },
+        });
+
+        const fetcher = new ClientIdMetadataDocumentFetcher({
+            fetch: (async () =>
+                new Response(endless, {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                })) as unknown as typeof fetch,
+        });
+
+        await expect(fetcher.fetchClient(CLIENT_ID)).rejects.toThrow('too large');
+
+        // One chunk past the cap is enough to decide. Anything approaching TOTAL means the
+        // body was buffered before being measured.
+        expect(produced).toBeLessThanOrEqual(4 * CHUNK);
+    });
+
+    it('reads a document split across several chunks', async () => {
+        // The size guard must not break the ordinary chunked case, including a multi-byte
+        // character landing on a chunk boundary.
+        const json = JSON.stringify({ ...validDocument, client_name: 'Ünicode Client 🔐' });
+        const bytes = new TextEncoder().encode(json);
+
+        const chunked = new ReadableStream<Uint8Array>({
+            start(controller) {
+                for (let i = 0; i < bytes.length; i += 7) {
+                    controller.enqueue(bytes.slice(i, i + 7));
+                }
+                controller.close();
+            },
+        });
+
+        const fetcher = new ClientIdMetadataDocumentFetcher({
+            fetch: (async () =>
+                new Response(chunked, {
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                })) as unknown as typeof fetch,
+        });
+
+        const document = await fetcher.fetchClient(CLIENT_ID);
+        expect(document.client.client_name).toBe('Ünicode Client 🔐');
+    });
+
     it('rejects loopback and IP-literal hosts without fetching', async () => {
         const fetch = mockFetch(validDocument);
         const fetcher = new ClientIdMetadataDocumentFetcher({ fetch });

@@ -127,15 +127,15 @@ export class ClientIdMetadataDocumentFetcher {
             throw new InvalidClientError(`Failed to fetch client_id metadata document: HTTP ${response.status}`);
         }
 
+        // Cheap rejection when the server declares an oversized body. Only a hint: the header
+        // is absent on chunked responses and a hostile server can understate it, so readBody
+        // enforces the real limit.
         const contentLength = response.headers.get('content-length');
         if (contentLength && Number(contentLength) > MAX_DOCUMENT_SIZE_BYTES) {
             throw new InvalidClientError('client_id metadata document is too large');
         }
 
-        const body = await response.text();
-        if (body.length > MAX_DOCUMENT_SIZE_BYTES) {
-            throw new InvalidClientError('client_id metadata document is too large');
-        }
+        const body = await this.readBody(response);
 
         let json: unknown;
         try {
@@ -163,6 +163,52 @@ export class ClientIdMetadataDocumentFetcher {
             client: result.data,
             expiresAt: new Date(Date.now() + this.cacheTtlMs(response.headers.get('cache-control'))),
         };
+    }
+
+    /**
+     * Read the response body, stopping as soon as it exceeds {@link MAX_DOCUMENT_SIZE_BYTES}.
+     *
+     * `response.text()` would buffer the whole body before anything could check its size, so
+     * a chunked response with no `content-length` could make this server hold an arbitrary
+     * amount of attacker-chosen data. The fetch timeout does not help: it bounds how long the
+     * transfer may run, not how much arrives in that time.
+     *
+     * The client_id is supplied by whoever is calling the authorization endpoint, so the URL
+     * being fetched is attacker-controlled by design.
+     */
+    private async readBody(response: Response): Promise<string> {
+        if (!response.body) {
+            return await response.text();
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let received = 0;
+        let body = '';
+
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+
+                received += value.byteLength;
+                if (received > MAX_DOCUMENT_SIZE_BYTES) {
+                    throw new InvalidClientError('client_id metadata document is too large');
+                }
+
+                // stream: true so a multi-byte character split across two chunks survives.
+                body += decoder.decode(value, { stream: true });
+            }
+            body += decoder.decode();
+        } finally {
+            // Releases the connection: on the oversize path this stops the remote from
+            // continuing to send, which is the whole point of bailing out early.
+            await reader.cancel().catch(() => {});
+        }
+
+        return body;
     }
 
     private cacheTtlMs(cacheControl: string | null): number {
