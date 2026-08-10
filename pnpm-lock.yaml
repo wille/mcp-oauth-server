@@ -17,9 +17,6 @@ importers:
       express-rate-limit:
         specifier: '>=7.5'
         version: 8.2.1(express@5.2.1)
-      pkce-challenge:
-        specifier: ^5.0.1
-        version: 5.0.1
       zod:
         specifier: ^4.1.13
         version: 4.1.13

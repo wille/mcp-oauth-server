@@ -55,7 +55,6 @@
   },
   "dependencies": {
     "debug": "^4.4.3",
-    "pkce-challenge": "^5.0.1",
     "zod": "^4.1.13"
   },
   "keywords": [
