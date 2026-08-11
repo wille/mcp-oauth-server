@@ -1,7 +1,7 @@
 import { OAuthClientInformationFull } from './schemas.js';
 import debug from 'debug';
 import { OAuthServerModel } from './OAuthServerModel';
-import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization, ClientIdMetadataDocument } from './types';
+import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization, ClientIdMetadataDocument, GrantId } from './types';
 import { normalizeDeviceUserCode } from './deviceFlow';
 
 const log = debug('oauth:MemoryOAuthServerModel');
@@ -58,11 +58,13 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         return this.accessTokens.get(accessToken);
     }
 
-    async revokeAccessToken(accessToken: string, clientId: string): Promise<void> {
+    async revokeAccessToken(accessToken: string, clientId: string): Promise<AccessToken | undefined> {
         const token = this.accessTokens.get(accessToken);
-        if (token?.clientId === clientId) {
-            this.accessTokens.delete(accessToken);
+        if (token?.clientId !== clientId) {
+            return undefined;
         }
+        this.accessTokens.delete(accessToken);
+        return token;
     }
 
     async saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void> {
@@ -74,10 +76,25 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
         return this.refreshTokens.get(refreshToken);
     }
 
-    async revokeRefreshToken(refreshToken: string, clientId: string): Promise<void> {
+    async revokeRefreshToken(refreshToken: string, clientId: string): Promise<RefreshToken | undefined> {
         const token = this.refreshTokens.get(refreshToken);
-        if (token?.clientId === clientId) {
-            this.refreshTokens.delete(refreshToken);
+        if (token?.clientId !== clientId) {
+            return undefined;
+        }
+        this.refreshTokens.delete(refreshToken);
+        return token;
+    }
+
+    async revokeGrant(grantId: GrantId): Promise<void> {
+        for (const [key, token] of this.accessTokens) {
+            if (token.grantId === grantId) {
+                this.accessTokens.delete(key);
+            }
+        }
+        for (const [key, token] of this.refreshTokens) {
+            if (token.grantId === grantId) {
+                this.refreshTokens.delete(key);
+            }
         }
     }
 

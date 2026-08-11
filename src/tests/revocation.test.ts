@@ -132,6 +132,72 @@ describe('RFC 7009 token revocation', () => {
         });
     });
 
+    describe('§2.1 revoking a refresh token invalidates the grant', () => {
+        // "If the particular token is a refresh token and the authorization server supports
+        // the revocation of access tokens, then the authorization server SHOULD also
+        // invalidate all access tokens based on the same authorization grant."
+        it('revokes access tokens from the same grant, including ones issued before a rotation', async () => {
+            const first = await issueTokens(alice);
+            const rotated = await server.exchangeRefreshToken(alice, first.refresh_token!);
+
+            // Both access tokens belong to one authorization; only the newest refresh token
+            // is still live after rotation.
+            expect(await model.getAccessToken(first.access_token)).toBeDefined();
+            expect(await model.getAccessToken(rotated.access_token)).toBeDefined();
+
+            await server.revokeToken(alice, { token: rotated.refresh_token! });
+
+            expect(await model.getAccessToken(first.access_token)).toBeUndefined();
+            expect(await model.getAccessToken(rotated.access_token)).toBeUndefined();
+            expect(await model.getRefreshToken(rotated.refresh_token!)).toBeUndefined();
+        });
+
+        it('leaves a second, independent authorization by the same user and client alone', async () => {
+            // The trap in cascading by clientId + userId: these two grants share both, but
+            // disconnecting one session must not end the other.
+            const sessionA = await issueTokens(alice);
+            const sessionB = await issueTokens(alice);
+
+            await server.revokeToken(alice, { token: sessionA.refresh_token! });
+
+            expect(await model.getAccessToken(sessionA.access_token)).toBeUndefined();
+            expect(await model.getAccessToken(sessionB.access_token)).toBeDefined();
+            expect(await model.getRefreshToken(sessionB.refresh_token!)).toBeDefined();
+        });
+
+        it('keeps the grant when only an access token is revoked', async () => {
+            // The reverse direction is a MAY in §2.1, and is declined: a client dropping one
+            // access token has not asked to end its session.
+            const tokens = await issueTokens(alice);
+
+            await server.revokeToken(alice, { token: tokens.access_token });
+
+            expect(await model.getAccessToken(tokens.access_token)).toBeUndefined();
+            expect(await model.getRefreshToken(tokens.refresh_token!)).toBeDefined();
+            await expect(server.exchangeRefreshToken(alice, tokens.refresh_token!)).resolves.toHaveProperty('access_token');
+        });
+
+        it('carries one grant id across rotations', async () => {
+            const first = await issueTokens(alice);
+            const rotated = await server.exchangeRefreshToken(alice, first.refresh_token!);
+
+            const original = await model.getAccessToken(first.access_token);
+            const afterRotation = await model.getAccessToken(rotated.access_token);
+
+            expect(original!.grantId).toBeTruthy();
+            expect(afterRotation!.grantId).toBe(original!.grantId);
+        });
+
+        it('does not cascade for a client that does not own the token', async () => {
+            const tokens = await issueTokens(alice);
+
+            await server.revokeToken(bob, { token: tokens.refresh_token! });
+
+            expect(await model.getAccessToken(tokens.access_token)).toBeDefined();
+            expect(await model.getRefreshToken(tokens.refresh_token!)).toBeDefined();
+        });
+    });
+
     describe('§2.2 the response never reveals whether the token existed', () => {
         // "The authorization server responds with HTTP status code 200 if the token has been
         // revoked successfully or if the client submitted an invalid token." Answering

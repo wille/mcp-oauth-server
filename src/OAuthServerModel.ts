@@ -1,7 +1,7 @@
 import { OAuthClientInformationFull } from './schemas.js';
 import { OAuthClientMetadata } from './schemas.js';
 import { OAuthRegisteredClientsStore } from './clients.js';
-import { AuthorizationCode, AccessToken, RefreshToken, DeviceAuthorization, ClientIdMetadataDocument } from './types.js';
+import { AuthorizationCode, AccessToken, RefreshToken, DeviceAuthorization, ClientIdMetadataDocument, GrantId } from './types.js';
 
 export interface OAuthServerModel extends OAuthRegisteredClientsStore {
     registerClient?(client: OAuthClientMetadata): Promise<OAuthClientInformationFull>;
@@ -102,14 +102,37 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
      * as section 2.2 requires - so a client cannot use it to discover whether someone
      * else's token exists.
      *
-     * Do not throw when nothing matches; there is nothing for the caller to report.
+     * Do not throw when nothing matches; there is nothing for the caller to report. Return the
+     * record that was removed, or `undefined` if none matched - `DELETE ... RETURNING *`. The
+     * library needs the record's {@link GrantId} to cascade the revocation.
      */
-    revokeAccessToken(accessToken: string, clientId: string): Promise<void>;
+    revokeAccessToken(accessToken: string, clientId: string): Promise<AccessToken | undefined>;
 
     saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void>;
 
     /** Revoke a refresh token, scoped to `clientId` exactly as {@link revokeAccessToken} is. */
-    revokeRefreshToken(refreshToken: string, clientId: string): Promise<void>;
+    revokeRefreshToken(refreshToken: string, clientId: string): Promise<RefreshToken | undefined>;
+
+    /**
+     * Revoke every access and refresh token belonging to one authorization.
+     *
+     * ```sql
+     * DELETE FROM access_tokens  WHERE grant_id = $1;
+     * DELETE FROM refresh_tokens WHERE grant_id = $1;
+     * ```
+     *
+     * RFC 7009 §2.1: revoking a refresh token SHOULD also invalidate the access tokens issued
+     * from the same authorization grant. Without this, an access token stays valid for the
+     * rest of its lifetime after the user has disconnected the client - up to
+     * {@link OAuthServerOptions.accessTokenLifetime}, an hour by default.
+     *
+     * Requires a `grant_id` column carrying {@link GrantId}. Match on it exactly: rows with a
+     * null or empty grant id belong to no known authorization and must never be swept up by
+     * this call.
+     *
+     * Authorization codes are not covered - they live minutes, and §2.1 concerns tokens.
+     */
+    revokeGrant(grantId: GrantId): Promise<void>;
 
     /**
      * Fetch a refresh token and invalidate it in the same atomic operation, but only if it

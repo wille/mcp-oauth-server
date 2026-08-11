@@ -9,12 +9,29 @@ export interface AuthorizationParams {
     resource?: URL;
 }
 
+/**
+ * Identifies the authorization a credential descends from: one decision, by one user, for one
+ * client, over one set of scopes. Every access and refresh token issued from that decision
+ * carries the same value, including tokens minted by later refresh rotations.
+ *
+ * `clientId` and `userId` together are not a substitute. The same user can authorize the same
+ * client more than once - a second device, or a second consent with wider scopes - and those
+ * are separate authorizations that have to be revocable independently.
+ *
+ * Optional because records written before this field existed will not have one. The library
+ * populates it on everything it issues and treats its absence as "no grant to cascade to".
+ * Persist it: {@link OAuthServerModel.revokeGrant} cannot do its job without it.
+ */
+export type GrantId = string;
+
 export interface AuthorizationCode extends Omit<AuthorizationParams, 'resource'> {
     authorizationCode: string;
     clientId: string;
     userId: string;
     expiresAt: Date;
     resource?: string;
+    /** See {@link GrantId}. */
+    grantId?: GrantId;
 }
 
 export interface AccessToken {
@@ -24,6 +41,8 @@ export interface AccessToken {
     clientId: string;
     userId?: string;
     resource?: string;
+    /** See {@link GrantId}. */
+    grantId?: GrantId;
 }
 
 export interface RefreshToken {
@@ -33,6 +52,8 @@ export interface RefreshToken {
     clientId: string;
     userId?: string;
     resource?: string;
+    /** See {@link GrantId}. */
+    grantId?: GrantId;
 }
 
 /**
@@ -64,6 +85,8 @@ export interface DeviceAuthorization {
     userId?: string;
     /** Last time the client received authorization_pending or slow_down */
     lastPollResponseAtMs?: number;
+    /** See {@link GrantId}. Assigned when the device authorization is created. */
+    grantId?: GrantId;
 }
 
 /**

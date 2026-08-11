@@ -222,6 +222,7 @@ describe('MCP Auth Router', () => {
                             saveRefreshToken: async () => undefined,
                             revokeRefreshToken: async () => undefined,
                             consumeRefreshToken: async () => undefined,
+                            revokeGrant: async () => undefined,
                         },
                     }),
             ).toThrow('dynamic client registration is not supported by this authorization server');

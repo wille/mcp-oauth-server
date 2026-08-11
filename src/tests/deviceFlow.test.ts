@@ -26,7 +26,7 @@ function createDeviceFlowApp() {
             scopesSupported: ['mcp:tools'],
         }),
     );
-    return { app, provider };
+    return { app, provider, model };
 }
 
 describe('RFC 8628 device authorization grant', () => {
@@ -117,6 +117,41 @@ describe('RFC 8628 device authorization grant', () => {
         expect(second.body.error).toBe('slow_down');
 
         await provider.approveDeviceAuthorization(dev.body.user_code, 'u1');
+    });
+
+    it('binds device-flow tokens to one grant so revocation cascades', async () => {
+        const { app, provider, model } = createDeviceFlowApp();
+
+        const reg = await supertest(app)
+            .post('/register')
+            .send({
+                redirect_uris: ['http://localhost/cb'],
+                grant_types: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+                response_types: ['code'],
+                token_endpoint_auth_method: 'none',
+            });
+        const clientId = reg.body.client_id as string;
+
+        const dev = await supertest(app).post('/device').type('form').send({ client_id: clientId, scope: 'mcp:tools' });
+        await provider.approveDeviceAuthorization(dev.body.user_code, 'user-42');
+
+        const tokens = await supertest(app).post('/token').type('form').send({
+            client_id: clientId,
+            grant_type: DEVICE_AUTHORIZATION_GRANT_TYPE,
+            device_code: dev.body.device_code,
+        });
+        expect(tokens.status).toBe(200);
+
+        const accessToken = await model.getAccessToken(tokens.body.access_token);
+        expect(accessToken!.grantId).toBeTruthy();
+
+        // RFC 7009 §2.1 cascade, reached through the device grant rather than a code exchange.
+        const revoked = await supertest(app).post('/revoke').type('form').send({
+            client_id: clientId,
+            token: tokens.body.refresh_token,
+        });
+        expect(revoked.status).toBe(200);
+        expect(await model.getAccessToken(tokens.body.access_token)).toBeUndefined();
     });
 
     it('returns access_denied after denyDeviceAuthorization', async () => {

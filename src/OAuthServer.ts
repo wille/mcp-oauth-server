@@ -29,7 +29,7 @@ import {
 } from './errors.js';
 import crypto from 'node:crypto';
 import debug from 'debug';
-import { AccessToken, DeviceAuthorization, DeviceAuthorizationEndpointResponse, RefreshToken } from './types';
+import { AccessToken, DeviceAuthorization, DeviceAuthorizationEndpointResponse, GrantId, RefreshToken } from './types';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceCode, generateDeviceUserCode, normalizeDeviceUserCode } from './deviceFlow';
 import { OAuthServerModel } from './OAuthServerModel';
 import { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
@@ -520,6 +520,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                     codeChallenge: params.codeChallenge,
                     redirectUri: params.redirectUri,
                     state: params.state,
+                    // This call is the authorization decision, so this is where the grant
+                    // begins. Every token descended from this code inherits the id.
+                    grantId: this.generateGrantId(),
                 },
                 client,
             );
@@ -612,6 +615,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scopes: codeData.scopes || [],
                 expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
                 resource: codeData.resource,
+                grantId: codeData.grantId,
             };
 
             await this.model.saveAccessToken(tokenData, client);
@@ -620,6 +624,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 userId: codeData.userId,
                 scopes: codeData.scopes || [],
                 resource: codeData.resource,
+                grantId: codeData.grantId,
             });
 
             log('exchangeAuthorizationCode', {
@@ -705,6 +710,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scopes: scopes || [],
                 expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
                 resource: refreshTokenData.resource,
+                // Rotation continues the same authorization, so the grant id carries over
+                // rather than starting a new one.
+                grantId: refreshTokenData.grantId,
             };
             await this.model.saveAccessToken(newAccessToken, client);
 
@@ -713,6 +721,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 userId: refreshTokenData.userId,
                 scopes: scopes || [],
                 resource: refreshTokenData.resource,
+                grantId: refreshTokenData.grantId,
             });
 
             return {
@@ -751,6 +760,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scopes: validatedScopes || [],
                 expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
                 resource: resource?.href,
+                // No user authorized anything here and no refresh token is issued, so each
+                // request is a grant of one token. The id exists so revocation is uniform.
+                grantId: this.generateGrantId(),
             };
             await this.model.saveAccessToken(accessToken, client);
 
@@ -820,7 +832,19 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             // as section 2.2 requires - revocation cannot be used to probe for the
             // existence of another client's token.
             await this.model.revokeAccessToken(request.token, client.client_id);
-            await this.model.revokeRefreshToken(request.token, client.client_id);
+            const revokedRefreshToken = await this.model.revokeRefreshToken(request.token, client.client_id);
+
+            // RFC 7009 section 2.1: revoking a refresh token SHOULD also invalidate the access
+            // tokens issued from the same authorization grant. Otherwise a client the user has
+            // just disconnected keeps working until its access token expires - an hour by
+            // default.
+            //
+            // The mirror image, revoking a refresh token because an access token was presented,
+            // is only a MAY in the same section, and it is not done here: a client dropping one
+            // access token has not asked to end its session.
+            if (revokedRefreshToken?.grantId) {
+                await this.model.revokeGrant(revokedRefreshToken.grantId);
+            }
         } catch (error) {
             this.errorHandler('revokeToken', error, { client, request });
             throw error;
@@ -869,6 +893,8 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 expiresAt,
                 pollIntervalSeconds: this.devicePollIntervalSeconds,
                 status: 'pending',
+                // Assigned up front so the tokens issued after approval can inherit it.
+                grantId: this.generateGrantId(),
             };
 
             await this.model.saveDeviceAuthorization!(device);
@@ -940,6 +966,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                     scopes: approved.scopes || [],
                     expiresAt: new Date(Date.now() + this.accessTokenLifetime * 1000),
                     resource: approved.resource,
+                    grantId: approved.grantId,
                 };
                 await this.model.saveAccessToken(tokenData, client);
 
@@ -947,6 +974,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                     userId: approved.userId,
                     scopes: approved.scopes || [],
                     resource: approved.resource,
+                    grantId: approved.grantId,
                 });
 
                 log('exchangeDeviceCode', { clientId: client.client_id, userId: approved.userId });
@@ -1050,6 +1078,15 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     }
 
     /**
+     * A {@link GrantId} is an identifier, not a credential: it is never handed to a client and
+     * grants nothing on its own, so a UUID is enough. Keeping it distinct from
+     * {@link generateToken} avoids implying it should be treated as a secret.
+     */
+    private generateGrantId(): GrantId {
+        return crypto.randomUUID();
+    }
+
+    /**
      * Issues and stores a refresh token, or returns undefined when one must not be issued.
      *
      * A refresh token is only useful if it can be redeemed later, which needs the grant
@@ -1060,7 +1097,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
      */
     private async issueRefreshToken(
         client: OAuthClientInformationFull,
-        grant: { userId?: string; scopes: string[]; resource?: string },
+        grant: { userId?: string; scopes: string[]; resource?: string; grantId?: GrantId },
     ): Promise<string | undefined> {
         if (!this.grantTypes.includes('refresh_token') || !client.grant_types?.includes('refresh_token')) {
             return undefined;
@@ -1073,6 +1110,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             scopes: grant.scopes,
             expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
             resource: grant.resource,
+            grantId: grant.grantId,
         };
         await this.model.saveRefreshToken(refreshToken, client);
 
