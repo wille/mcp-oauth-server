@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import crypto from 'node:crypto';
 import express from 'express';
 import supertest from 'supertest';
 import { mcpAuthRouter } from '../router.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
-import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
+import { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceUserCode, normalizeDeviceUserCode } from '../deviceFlow.js';
 
 function createDeviceFlowApp() {
     const model = new MemoryOAuthServerModel();
@@ -28,6 +29,44 @@ function createDeviceFlowApp() {
     );
     return { app, provider, model };
 }
+
+describe('generateDeviceUserCode', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('formats the code as XXXX-XXXX from the wearable alphabet', () => {
+        for (let i = 0; i < 200; i++) {
+            expect(generateDeviceUserCode()).toMatch(/^[BCDFGHJKLMNPQRSTVWXZ2-9]{4}-[BCDFGHJKLMNPQRSTVWXZ2-9]{4}$/);
+        }
+    });
+
+    it('normalizes back to the eight characters it generated', () => {
+        const code = generateDeviceUserCode();
+
+        expect(normalizeDeviceUserCode(code)).toBe(code.replace('-', ''));
+        expect(normalizeDeviceUserCode(code.toLowerCase())).toBe(code.replace('-', ''));
+    });
+
+    /**
+     * The alphabet's length does not divide 256, so deriving each character by reducing a random
+     * byte would over-represent the first `256 % length` of them. Asserting that a uniform index
+     * is drawn per character pins that, where a distribution test could only ever be statistical.
+     */
+    it('draws a uniform index per character instead of reducing a byte', () => {
+        const randomInt = vi.spyOn(crypto, 'randomInt');
+        const randomBytes = vi.spyOn(crypto, 'randomBytes');
+
+        generateDeviceUserCode();
+
+        expect(randomInt).toHaveBeenCalledTimes(8);
+        // Every draw covers the whole alphabet, so no character is reachable by more paths than
+        // another. 28 today; the assertion is that all eight draws share one range.
+        const ranges = new Set(randomInt.mock.calls.map((call) => call[0]));
+        expect(ranges.size).toBe(1);
+        expect(randomBytes).not.toHaveBeenCalled();
+    });
+});
 
 describe('RFC 8628 device authorization grant', () => {
     it('advertises device_authorization_endpoint and grant type in metadata', async () => {

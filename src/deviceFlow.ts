@@ -14,12 +14,17 @@ export function normalizeDeviceUserCode(userCode: string): string {
 
 /**
  * RFC 8628-style user code: 8 wearable characters as XXXX-XXXX.
+ *
+ * `crypto.randomInt` rather than `randomBytes` with `%`: the alphabet's length does not divide
+ * 256, so reducing a byte would over-represent the first `256 % length` characters - with the
+ * current 28 characters, B, C, D and F would each come up 11% more often than the rest.
+ * `randomInt` rejection-samples internally, so the codes stay uniform if the alphabet or the
+ * length is ever changed.
  */
 export function generateDeviceUserCode(): string {
-    const bytes = crypto.randomBytes(8);
     let raw = '';
     for (let i = 0; i < 8; i++) {
-        raw += USER_CODE_ALPHABET[bytes[i]! % USER_CODE_ALPHABET.length];
+        raw += USER_CODE_ALPHABET[crypto.randomInt(USER_CODE_ALPHABET.length)];
     }
     return `${raw.slice(0, 4)}-${raw.slice(4)}`;
 }
