@@ -29,11 +29,19 @@ describe('Metadata Handler', () => {
         const response = await supertest(app).post('/.well-known/oauth-authorization-server').send({});
 
         expect(response.status).toBe(405);
-        expect(response.headers.allow).toBe('GET');
+        expect(response.headers.allow).toBe('GET, HEAD');
         expect(response.body).toEqual({
             error: 'method_not_allowed',
             error_description: 'The method POST is not allowed for this endpoint',
         });
+    });
+
+    it('answers HEAD, which health checks and cache validators use', async () => {
+        const response = await supertest(app).head('/.well-known/oauth-authorization-server');
+
+        expect(response.status).toBe(200);
+        expect(response.headers['content-type']).toMatch(/application\/json/);
+        expect(response.text).toBeUndefined();
     });
 
     it('returns the metadata object', async () => {
