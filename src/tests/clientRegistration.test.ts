@@ -17,6 +17,36 @@ describe('OAuthServer Client Registration', () => {
         });
     });
 
+    describe('redirect_uris is required for redirect-based flows (RFC 7591 §2)', () => {
+        it('rejects an empty redirect_uris for the authorization_code grant', async () => {
+            await expect(
+                oauthServer.registerClient!({
+                    redirect_uris: [],
+                    grant_types: ['authorization_code', 'refresh_token'],
+                    token_endpoint_auth_method: 'none',
+                }),
+            ).rejects.toMatchObject({ errorCode: 'invalid_redirect_uri' });
+        });
+
+        it('rejects an empty redirect_uris when grant_types is omitted', async () => {
+            // Omitting grant_types defaults to authorization_code, so the requirement applies.
+            await expect(oauthServer.registerClient!({ redirect_uris: [] })).rejects.toMatchObject({
+                errorCode: 'invalid_redirect_uri',
+            });
+        });
+
+        it('allows an empty redirect_uris for a client_credentials-only client', async () => {
+            // No user agent is involved, so there is nowhere to redirect to.
+            const client = await oauthServer.registerClient!({
+                redirect_uris: [],
+                grant_types: ['client_credentials'],
+            });
+
+            expect(client.client_id).toBeTruthy();
+            expect(client.redirect_uris).toEqual([]);
+        });
+    });
+
     describe('redirect URI transport security (OAuth 2.1 §2.3.1)', () => {
         const register = (server: OAuthServer, redirect_uris: string[]) =>
             server.registerClient!({ redirect_uris, grant_types: ['authorization_code'], token_endpoint_auth_method: 'none' });

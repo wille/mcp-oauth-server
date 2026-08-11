@@ -446,6 +446,19 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new UnsupportedGrantTypeError('Unsupported grant_type: ' + client.grant_types?.join(', '));
             }
 
+            // RFC 7591 §2 makes redirect_uris required for clients using a flow that redirects.
+            // Only the authorization code grant does: client_credentials involves no user agent,
+            // and the device grant sends the user to the verification URI rather than back to
+            // the client. So a client asking for neither may register without any, while one
+            // asking for the code grant with an empty array would register successfully and
+            // then fail every authorization attempt.
+            if (client.grant_types?.includes('authorization_code') && client.redirect_uris.length === 0) {
+                throw new CustomOAuthError(
+                    'invalid_redirect_uri',
+                    'redirect_uris must contain at least one URI to use the authorization_code grant',
+                );
+            }
+
             if (client.token_endpoint_auth_method && !SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS.includes(client.token_endpoint_auth_method)) {
                 throw new CustomOAuthError('unsupported_token_endpoint_auth_method', 'Unsupported token_endpoint_auth_method');
             }
