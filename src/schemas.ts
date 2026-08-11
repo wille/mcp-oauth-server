@@ -1,6 +1,12 @@
 import * as z from 'zod/v4';
 /**
  * Reusable URL validation that disallows javascript: scheme
+ *
+ * Every client-supplied URL in {@link OAuthClientMetadataSchema} must use this. Most of those
+ * fields exist to be rendered on a consent screen - `client_uri`, `logo_uri`, `tos_uri`,
+ * `policy_uri` - so a script-bearing scheme reaching one of them is script execution on the
+ * authorization server's own origin, on the page where the user is deciding whether to trust
+ * the client. With dynamic client registration open, anyone can supply these values.
  */
 export const SafeUrlSchema = z
     .url()
@@ -141,7 +147,8 @@ export const OAuthErrorResponseSchema = z.object({
     error_uri: z.string().optional(),
 });
 /**
- * Optional version of SafeUrlSchema that allows empty string for retrocompatibility on tos_uri and logo_uri
+ * Optional version of SafeUrlSchema that allows empty string for retrocompatibility on tos_uri,
+ * logo_uri and policy_uri
  */
 export const OptionalSafeUrlSchema = SafeUrlSchema.optional().or(z.literal('').transform(() => undefined));
 /**
@@ -162,7 +169,7 @@ export const OAuthClientMetadataSchema = z
         scope: z.string().optional(),
         contacts: z.array(z.string()).optional(),
         tos_uri: OptionalSafeUrlSchema,
-        policy_uri: z.string().optional(),
+        policy_uri: OptionalSafeUrlSchema,
         jwks_uri: SafeUrlSchema.optional(),
         jwks: z.any().optional(),
         software_id: z.string().optional(),
