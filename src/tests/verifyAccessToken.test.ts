@@ -184,7 +184,12 @@ describe('OAuthServer.verifyAccessToken', () => {
     });
 
     it('should return correct expiresAt as seconds since epoch', async () => {
-        const expiresAt = new Date();
+        // Has to be in the future: verifyAccessToken rejects an expired token, so an expiry of
+        // "now" only survives if the check happens inside the same millisecond. The sub-second
+        // component is set deliberately so the assertion distinguishes truncation from rounding -
+        // .750 would round up to the next second.
+        const expiresAt = new Date(Date.now() + 3_600_000);
+        expiresAt.setMilliseconds(750);
         const accessToken: AccessToken = {
             token: 'token-expiration',
             clientId: client.client_id,
@@ -198,6 +203,7 @@ describe('OAuthServer.verifyAccessToken', () => {
         const authInfo = await oauthServer.verifyAccessToken('token-expiration');
 
         expect(authInfo.expiresAt).toBe(Math.floor(expiresAt.getTime() / 1000));
+        expect(authInfo.expiresAt).not.toBe(Math.round(expiresAt.getTime() / 1000));
     });
 
     it('should handle token with multiple scopes', async () => {
