@@ -1096,8 +1096,18 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         }
     }
 
+    /**
+     * 256 bits, encoded base64url.
+     *
+     * These values travel in places where `+`, `/` and `=` need escaping - an authorization code
+     * is returned as a query parameter on the redirect back to the client, and tokens are echoed
+     * in logs and configuration files. Percent-encoding handles that correctly, and this server
+     * does encode it correctly, but only as long as every hop does: anything that treats `+` as a
+     * space, or trims what looks like padding, corrupts the value. base64url has nothing to
+     * escape, which also matches {@link generateDeviceCode}.
+     */
     private generateToken(): string {
-        return crypto.randomBytes(32).toString('base64');
+        return crypto.randomBytes(32).toString('base64url');
     }
 
     /**

@@ -279,6 +279,27 @@ describe('OAuthServer Authorization Code Flow', () => {
             expect(savedCode?.redirectUri).toBe('http://localhost:3000/callback');
         });
 
+        it('issues authorization codes and tokens containing only URL-safe characters', async () => {
+            // base64url, so nothing needs percent-encoding on the way back to the client and no
+            // hop can corrupt the value by treating '+' as a space or trimming '=' padding.
+            const urlSafe = /^[A-Za-z0-9_-]+$/;
+            const { codeVerifier, codeChallenge } = generatePKCEPair();
+
+            await oauthServer.authenticate(
+                client,
+                { redirectUri: 'http://localhost:3000/callback', codeChallenge, scopes: ['mcp:tools'] },
+                'user-123',
+                mockResponse,
+            );
+
+            const code = new URL(mockRedirect.mock.calls[0][0]).searchParams.get('code')!;
+            expect(code).toMatch(urlSafe);
+
+            const tokens = await oauthServer.exchangeAuthorizationCode(client, code, codeVerifier);
+            expect(tokens.access_token).toMatch(urlSafe);
+            expect(tokens.refresh_token).toMatch(urlSafe);
+        });
+
         it('should include state in redirect when provided', async () => {
             const params = {
                 redirectUri: 'http://localhost:3000/callback',
