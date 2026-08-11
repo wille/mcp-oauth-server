@@ -259,7 +259,7 @@ describe('MCP Auth Router', () => {
             expect(response.body.grant_types_supported).toEqual(['authorization_code', 'refresh_token', 'client_credentials']);
             expect(response.body.code_challenge_methods_supported).toEqual(['S256']);
             expect(response.body.token_endpoint_auth_methods_supported).toEqual(['client_secret_post', 'none']);
-            expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
+            expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post', 'none']);
             expect(response.body.authorization_response_iss_parameter_supported).toBe(true);
 
             // Verify optional fields
@@ -286,7 +286,7 @@ describe('MCP Auth Router', () => {
             // Verify missing optional endpoints
             expect(response.body.registration_endpoint).toBeUndefined();
             expect(response.body.revocation_endpoint).toBe('https://auth.example.com/revoke');
-            expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
+            expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post', 'none']);
             expect(response.body.service_documentation).toBeUndefined();
         });
 

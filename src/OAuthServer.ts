@@ -46,6 +46,20 @@ export const SUPPORTED_GRANT_TYPES = [
 export type OAuthGrantType = (typeof SUPPORTED_GRANT_TYPES)[number];
 export const DEFAULT_GRANT_TYPES: OAuthGrantType[] = ['authorization_code', 'refresh_token'];
 
+/**
+ * Client authentication methods this server accepts, as advertised in metadata.
+ *
+ * `client_secret_post` is the one OAuth 2.1 §2.4.1 requires, and `none` covers public clients,
+ * which hold no secret. Nothing else is implemented: `client_secret_basic` is optional in OAuth
+ * 2.1 (only RFC 6749 §2.3.1 mandated it) and the MCP Authorization spec says nothing about
+ * client authentication, so it earns no place here. Assertion-based methods such as
+ * `private_key_jwt` are likewise out of scope.
+ *
+ * Registration rejects any other value, so a client learns at registration time rather than
+ * from a puzzling 400 at the token endpoint.
+ */
+export const SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_post', 'none'];
+
 type ErrorHandler = (
     step:
         | 'getClient'
@@ -432,11 +446,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new UnsupportedGrantTypeError('Unsupported grant_type: ' + client.grant_types?.join(', '));
             }
 
-            if (
-                client.token_endpoint_auth_method &&
-                client.token_endpoint_auth_method !== 'none' &&
-                client.token_endpoint_auth_method !== 'client_secret_post'
-            ) {
+            if (client.token_endpoint_auth_method && !SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS.includes(client.token_endpoint_auth_method)) {
                 throw new CustomOAuthError('unsupported_token_endpoint_auth_method', 'Unsupported token_endpoint_auth_method');
             }
 

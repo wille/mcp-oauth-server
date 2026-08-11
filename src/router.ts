@@ -5,7 +5,7 @@ import { authorizationHandler, AuthorizationHandlerOptions } from './handlers/au
 import { revocationHandler, RevocationHandlerOptions } from './handlers/revoke.js';
 import { deviceAuthorizationHandler, DeviceAuthorizationHandlerOptions } from './handlers/device.js';
 import { metadataHandler } from './handlers/metadata.js';
-import { OAuthServer } from './OAuthServer.js';
+import { OAuthServer, SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS } from './OAuthServer.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from './deviceFlow.js';
 import { OAuthMetadata, OAuthProtectedResourceMetadata } from './schemas.js';
 
@@ -117,13 +117,14 @@ export const createOAuthMetadata = (options: {
         code_challenge_methods_supported: ['S256'],
 
         token_endpoint: new URL(`${basePath}/token`, baseUrl).href,
-        token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+        token_endpoint_auth_methods_supported: SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS,
         grant_types_supported,
 
         scopes_supported: options.scopesSupported,
 
         revocation_endpoint,
-        revocation_endpoint_auth_methods_supported: revocation_endpoint ? ['client_secret_post'] : undefined,
+        // The revocation endpoint runs the same client authentication middleware.
+        revocation_endpoint_auth_methods_supported: revocation_endpoint ? SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS : undefined,
 
         registration_endpoint,
 

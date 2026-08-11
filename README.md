@@ -52,6 +52,7 @@ npm install mcp-oauth-server@latest --save-exact
     - Protected Resource Metadata [(RFC 9728)](https://datatracker.ietf.org/doc/html/rfc9728)
     - Authorization Server Issuer Identification [(RFC 9207)](https://datatracker.ietf.org/doc/html/rfc9207)
     - Loopback redirect URIs with any port for native apps [(RFC 8252 §7.3)](https://datatracker.ietf.org/doc/html/rfc8252#section-7.3)
+    - Client authentication via `client_secret_post`, the method [OAuth 2.1 §2.4.1](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-v2-1#section-2.4.1) requires, or `none` for public clients. Secrets are compared in constant time
 - **Grant types**: Configurable via `grantTypes` - `authorization_code`, `refresh_token`, [`client_credentials`](#oauth-client-credentials-machine-to-machine), and [device authorization](https://datatracker.ietf.org/doc/html/rfc8628) (`urn:ietf:params:oauth:grant-type:device_code`, RFC 8628)
 - **Compatibility**: Works with MCP clients that omit a `resource` indicator [(RFC 8707)](https://datatracker.ietf.org/doc/html/rfc8707) or requested scopes when needed (`strictResource`)
 - **Flexible storage**: In-memory model for development (`MemoryOAuthServerModel`) or your own `OAuthServerModel` for production
@@ -59,7 +60,7 @@ npm install mcp-oauth-server@latest --save-exact
 **Not supported:**
 
 - Token introspection [(RFC 7662)](https://datatracker.ietf.org/doc/html/rfc7662) - validate access tokens via `OAuthServer.verifyAccessToken` (and `requireBearerAuth`) instead.
-- `private_key_jwt` client authentication for CIMD clients - CIMD clients are treated as public clients (`token_endpoint_auth_method: 'none'`).
+- Client authentication other than `client_secret_post` and `none` - `client_secret_basic` is optional in OAuth 2.1 (only RFC 6749 mandated it) and the MCP Authorization spec says nothing about client authentication, so registration rejects any other `token_endpoint_auth_method`, including assertion-based ones such as `private_key_jwt`. CIMD clients are treated as public clients (`token_endpoint_auth_method: 'none'`).
 - [OpenID Connect Discovery 1.0](https://openid.net/specs/openid-connect-discovery-1_0.html) - RFC 8414 metadata satisfies the MCP spec's discovery requirement on its own.
 
 ## OAuth client credentials (machine-to-machine)

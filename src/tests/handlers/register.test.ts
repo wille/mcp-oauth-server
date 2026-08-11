@@ -144,7 +144,7 @@ describe('Client Registration Handler', () => {
             // Test for public client (token_endpoint_auth_method not 'none')
             const publicClientMetadata: OAuthClientMetadata = {
                 redirect_uris: ['https://example.com/callback'],
-                token_endpoint_auth_method: 'client_secret_basic',
+                token_endpoint_auth_method: 'client_secret_post',
             };
 
             const publicResponse = await supertest(app).post('/register').send(publicClientMetadata);
@@ -189,7 +189,7 @@ describe('Client Registration Handler', () => {
         it('handles client with all metadata fields', async () => {
             const fullClientMetadata: OAuthClientMetadata = {
                 redirect_uris: ['https://example.com/callback'],
-                token_endpoint_auth_method: 'client_secret_basic',
+                token_endpoint_auth_method: 'client_secret_post',
                 grant_types: ['authorization_code', 'refresh_token'],
                 response_types: ['code'],
                 client_name: 'Test Client',

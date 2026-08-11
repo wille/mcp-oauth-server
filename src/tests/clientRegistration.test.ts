@@ -321,16 +321,21 @@ describe('OAuthServer Client Registration', () => {
                 expect(registered.token_endpoint_auth_method).toBe('client_secret_post');
             });
 
-            it('should throw error for unsupported token_endpoint_auth_method', async () => {
-                const clientMetadata = {
-                    redirect_uris: ['http://localhost:3000/callback'],
-                    grant_types: ['authorization_code', 'refresh_token'],
-                    response_types: ['code'],
-                    token_endpoint_auth_method: 'client_secret_basic' as any,
-                };
+            // Only client_secret_post and none are implemented, so anything else is rejected at
+            // registration rather than failing later at the token endpoint.
+            it.each(['client_secret_basic', 'client_secret_jwt', 'private_key_jwt', 'tls_client_auth'])(
+                'should throw error for unsupported token_endpoint_auth_method %s',
+                async (method) => {
+                    const clientMetadata = {
+                        redirect_uris: ['http://localhost:3000/callback'],
+                        grant_types: ['authorization_code', 'refresh_token'],
+                        response_types: ['code'],
+                        token_endpoint_auth_method: method,
+                    };
 
-                await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported token_endpoint_auth_method');
-            });
+                    await expect(oauthServer.registerClient!(clientMetadata)).rejects.toThrow('Unsupported token_endpoint_auth_method');
+                },
+            );
 
             it('should allow token_endpoint_auth_method to be undefined (defaults to none)', async () => {
                 const clientMetadata = {
