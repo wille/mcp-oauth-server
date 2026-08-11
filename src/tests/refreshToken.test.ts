@@ -26,6 +26,49 @@ describe('OAuthServer.exchangeRefreshToken', () => {
         });
     });
 
+    describe('grant support', () => {
+        /** Mint a refresh token directly, bypassing whatever the code grant would decide. */
+        async function saveRefreshTokenFor(server: OAuthServer, store: MemoryOAuthServerModel, forClient: OAuthClientInformationFull) {
+            await store.saveRefreshToken(
+                {
+                    token: 'refresh-token-under-test',
+                    clientId: forClient.client_id,
+                    userId: 'user-123',
+                    scopes: ['mcp:tools'],
+                    expiresAt: new Date(Date.now() + 1000000),
+                },
+                forClient,
+            );
+        }
+
+        it('refuses a client that is not registered for the refresh_token grant', async () => {
+            const codeOnlyClient = createTestClient({
+                redirect_uris: ['http://localhost:3000/callback'],
+                grant_types: ['authorization_code'],
+            });
+            await saveRefreshTokenFor(oauthServer, model, codeOnlyClient);
+
+            await expect(oauthServer.exchangeRefreshToken(codeOnlyClient, 'refresh-token-under-test')).rejects.toMatchObject({
+                errorCode: 'unauthorized_client',
+            });
+        });
+
+        it('refuses when the server has the refresh_token grant disabled', async () => {
+            const store = new MemoryOAuthServerModel();
+            const server = new OAuthServer({
+                model: store,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools'],
+                grantTypes: ['authorization_code'],
+            });
+            await saveRefreshTokenFor(server, store, client);
+
+            await expect(server.exchangeRefreshToken(client, 'refresh-token-under-test')).rejects.toMatchObject({
+                errorCode: 'unsupported_grant_type',
+            });
+        });
+    });
+
     it('should successfully exchange a valid refresh token for new tokens', async () => {
         // Create a refresh token
         const refreshToken: RefreshToken = {

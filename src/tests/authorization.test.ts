@@ -559,6 +559,53 @@ describe('OAuthServer Authorization Code Flow', () => {
             expect(refreshToken).toBeDefined();
         });
 
+        describe('refresh token issuance', () => {
+            /** Save a code for `forClient` and redeem it, returning the token response. */
+            async function redeemCode(server: OAuthServer, store: MemoryOAuthServerModel, forClient: OAuthClientInformationFull) {
+                const { codeVerifier, codeChallenge } = generatePKCEPair();
+                await store.saveAuthorizationCode({
+                    authorizationCode: 'auth-code-refresh-issuance',
+                    clientId: forClient.client_id,
+                    userId: 'user-123',
+                    scopes: ['mcp:tools'],
+                    expiresAt: new Date(Date.now() + 1000000),
+                    codeChallenge,
+                    redirectUri: 'http://localhost:3000/callback',
+                });
+                return server.exchangeAuthorizationCode(forClient, 'auth-code-refresh-issuance', codeVerifier);
+            }
+
+            it('omits the refresh token when the client is not registered for the grant', async () => {
+                // Issuing one anyway would hand the client a credential that
+                // exchangeRefreshToken refuses, and overstate what it was granted.
+                const codeOnlyClient = createTestClient({
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    grant_types: ['authorization_code'],
+                });
+
+                const result = await redeemCode(oauthServer, model, codeOnlyClient);
+
+                expect(result.access_token).toBeTruthy();
+                expect(result.refresh_token).toBeUndefined();
+            });
+
+            it('omits the refresh token when the server has the grant disabled', async () => {
+                const store = new MemoryOAuthServerModel();
+                const server = new OAuthServer({
+                    model: store,
+                    authorizationUrl: new URL('http://localhost:3000/consent'),
+                    scopesSupported: ['mcp:tools'],
+                    grantTypes: ['authorization_code'],
+                    strictResource: false,
+                });
+
+                const result = await redeemCode(server, store, client);
+
+                expect(result.access_token).toBeTruthy();
+                expect(result.refresh_token).toBeUndefined();
+            });
+        });
+
         it('should throw error for invalid authorization code', async () => {
             const { codeVerifier } = generatePKCEPair();
             await expect(oauthServer.exchangeAuthorizationCode(client, 'non-existent-code', codeVerifier)).rejects.toThrow(

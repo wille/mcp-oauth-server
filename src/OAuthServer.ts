@@ -616,15 +616,11 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             await this.model.saveAccessToken(tokenData, client);
 
-            const newRefreshTokenData: RefreshToken = {
-                token: this.generateToken(),
-                clientId: client.client_id,
+            const refreshToken = await this.issueRefreshToken(client, {
                 userId: codeData.userId,
                 scopes: codeData.scopes || [],
-                expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
                 resource: codeData.resource,
-            };
-            await this.model.saveRefreshToken(newRefreshTokenData, client);
+            });
 
             log('exchangeAuthorizationCode', {
                 clientId: client.client_id,
@@ -637,7 +633,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             return {
                 access_token: token,
-                refresh_token: newRefreshTokenData.token,
+                refresh_token: refreshToken,
                 token_type: 'bearer',
                 expires_in: this.accessTokenLifetime,
                 scope: (codeData.scopes || []).join(' '),
@@ -664,6 +660,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         try {
             if (!this.grantTypes.includes('refresh_token')) {
                 throw new UnsupportedGrantTypeError('refresh_token grant is not supported');
+            }
+            if (!client.grant_types?.includes('refresh_token')) {
+                throw new UnauthorizedClientError('Client is not authorized to use refresh_token grant');
             }
             // Rotated on every use, so the read must be atomic with the invalidation and
             // scoped to the client for the same reasons as exchangeAuthorizationCode.
@@ -709,19 +708,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             };
             await this.model.saveAccessToken(newAccessToken, client);
 
-            const newRefreshTokenData: RefreshToken = {
-                token: this.generateToken(),
-                clientId: client.client_id,
+            // Both preconditions were checked above, so this always rotates the token.
+            const rotatedRefreshToken = await this.issueRefreshToken(client, {
                 userId: refreshTokenData.userId,
                 scopes: scopes || [],
-                expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
                 resource: refreshTokenData.resource,
-            };
-            await this.model.saveRefreshToken(newRefreshTokenData, client);
+            });
 
             return {
                 access_token: newAccessToken.token,
-                refresh_token: newRefreshTokenData.token,
+                refresh_token: rotatedRefreshToken,
                 token_type: 'bearer',
                 expires_in: this.accessTokenLifetime,
                 scope: (scopes || []).join(' '),
@@ -947,21 +943,17 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 };
                 await this.model.saveAccessToken(tokenData, client);
 
-                const newRefreshTokenData: RefreshToken = {
-                    token: this.generateToken(),
-                    clientId: client.client_id,
+                const refreshToken = await this.issueRefreshToken(client, {
                     userId: approved.userId,
                     scopes: approved.scopes || [],
-                    expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
                     resource: approved.resource,
-                };
-                await this.model.saveRefreshToken(newRefreshTokenData, client);
+                });
 
                 log('exchangeDeviceCode', { clientId: client.client_id, userId: approved.userId });
 
                 return {
                     access_token: token,
-                    refresh_token: newRefreshTokenData.token,
+                    refresh_token: refreshToken,
                     token_type: 'bearer',
                     expires_in: this.accessTokenLifetime,
                     scope: (approved.scopes || []).join(' '),
@@ -1055,6 +1047,36 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
     private generateToken(): string {
         return crypto.randomBytes(32).toString('base64');
+    }
+
+    /**
+     * Issues and stores a refresh token, or returns undefined when one must not be issued.
+     *
+     * A refresh token is only useful if it can be redeemed later, which needs the grant
+     * enabled on this server *and* the client registered for it. Issuing one regardless
+     * hands the client a credential that {@link exchangeRefreshToken} will refuse, and
+     * misrepresents what the client was granted. `refresh_token` is optional in the token
+     * response (RFC 6749 §5.1), so the response simply omits it instead.
+     */
+    private async issueRefreshToken(
+        client: OAuthClientInformationFull,
+        grant: { userId?: string; scopes: string[]; resource?: string },
+    ): Promise<string | undefined> {
+        if (!this.grantTypes.includes('refresh_token') || !client.grant_types?.includes('refresh_token')) {
+            return undefined;
+        }
+
+        const refreshToken: RefreshToken = {
+            token: this.generateToken(),
+            clientId: client.client_id,
+            userId: grant.userId,
+            scopes: grant.scopes,
+            expiresAt: new Date(Date.now() + this.refreshTokenLifetime * 1000),
+            resource: grant.resource,
+        };
+        await this.model.saveRefreshToken(refreshToken, client);
+
+        return refreshToken.token;
     }
 
     /**

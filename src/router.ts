@@ -94,9 +94,12 @@ export const createOAuthMetadata = (options: {
 
     const enableAuthorizationCodeGrant = options.provider.grantTypes.includes('authorization_code');
 
-    const grant_types_supported = ['refresh_token'];
+    const grant_types_supported: string[] = [];
     if (enableAuthorizationCodeGrant) {
-        grant_types_supported.unshift('authorization_code');
+        grant_types_supported.push('authorization_code');
+    }
+    if (options.provider.grantTypes.includes('refresh_token')) {
+        grant_types_supported.push('refresh_token');
     }
     if (options.provider.grantTypes.includes('client_credentials')) {
         grant_types_supported.push('client_credentials');

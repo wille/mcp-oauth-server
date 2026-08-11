@@ -1,5 +1,6 @@
 import { mcpAuthRouter, AuthRouterOptions, mcpAuthMetadataRouter, AuthMetadataOptions } from '../router.js';
 import { OAuthServer } from '../OAuthServer.js';
+import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
 import { OAuthClientInformationFull, OAuthMetadata, OAuthTokenRevocationRequest, OAuthTokens } from '../schemas.js';
 import express, { Response } from 'express';
 import supertest from 'supertest';
@@ -286,6 +287,27 @@ describe('MCP Auth Router', () => {
             expect(response.body.revocation_endpoint).toBe('https://auth.example.com/revoke');
             expect(response.body.revocation_endpoint_auth_methods_supported).toEqual(['client_secret_post']);
             expect(response.body.service_documentation).toBeUndefined();
+        });
+
+        it('omits refresh_token from grant_types_supported when the grant is disabled', async () => {
+            // The advertised metadata has to describe what the server will actually honour;
+            // exchangeRefreshToken rejects the grant outright when it is not configured.
+            const app = express();
+            app.use(
+                mcpAuthRouter({
+                    provider: new OAuthServer({
+                        model: new MemoryOAuthServerModel(),
+                        issuerUrl: new URL('https://auth.example.com'),
+                        authorizationUrl: new URL('https://auth.example.com/consent'),
+                        grantTypes: ['authorization_code'],
+                    }),
+                }),
+            );
+
+            const response = await supertest(app).get('/.well-known/oauth-authorization-server');
+
+            expect(response.status).toBe(200);
+            expect(response.body.grant_types_supported).toEqual(['authorization_code']);
         });
 
         it('provides protected resource metadata', async () => {
