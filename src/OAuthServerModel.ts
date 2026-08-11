@@ -142,6 +142,4 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
      * every use, so both rules from {@link consumeAuthorizationCode} apply here unchanged.
      */
     consumeRefreshToken?(refreshToken: string, clientId: string): Promise<RefreshToken | undefined>;
-
-    generateToken?(): string;
 }
