@@ -1,6 +1,6 @@
 import * as z from 'zod/v4';
 import express, { RequestHandler } from 'express';
-import { OAuthServer } from '../OAuthServer.js';
+import { OAuthGrantType, OAuthServer } from '../OAuthServer.js';
 import { authenticateClient } from '../middleware/clientAuth.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
@@ -96,6 +96,18 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                 throw new ServerError('Internal Server Error');
             }
 
+            // What the server supports is checked before what the client is registered for, so
+            // that a grant this server does not offer is always reported as
+            // unsupported_grant_type. Checking the client first would answer
+            // unauthorized_client to a client that had not registered for the grant, which
+            // reads as "ask for this grant and try again" - and registration would accept the
+            // request, since registerClient only refuses a client when none of its grants are
+            // supported. The client would come back to a different error for an unchanged
+            // server configuration.
+            if (!provider.grantTypes.includes(grant_type as OAuthGrantType)) {
+                throw new UnsupportedGrantTypeError('The grant type is not supported by this authorization server.');
+            }
+
             switch (grant_type) {
                 case 'authorization_code': {
                     assertClientSupportsGrant(client, 'authorization_code');
@@ -165,6 +177,9 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                 }
 
                 default:
+                    // Unreachable for a client: the guard above rejects anything absent from
+                    // provider.grantTypes. Left as a backstop for a supported grant type that
+                    // has no branch here.
                     throw new UnsupportedGrantTypeError('The grant type is not supported by this authorization server.');
             }
         } catch (error) {

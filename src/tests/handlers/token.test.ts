@@ -194,6 +194,46 @@ describe('Token Handler', () => {
         });
     });
 
+    /**
+     * RFC 6749 §5.2 separates the two reasons a grant can be refused: unsupported_grant_type is
+     * the server not offering it, unauthorized_client is the client not being registered for it.
+     * The server's own configuration decides first, so a grant this server does not offer gets
+     * the same answer no matter what the client registered.
+     */
+    describe('Grant support precedence', () => {
+        it.each([
+            ['listed in the client’s grant_types', ['authorization_code', 'client_credentials']],
+            ['absent from the client’s grant_types', ['authorization_code']],
+        ])('reports unsupported_grant_type for a grant the server has disabled, %s', async (_label, clientGrants) => {
+            mockProvider.grantTypes = ['authorization_code'];
+            mockProvider.getClient = async () => ({ ...validClient, grant_types: clientGrants });
+
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: 'client_credentials',
+            });
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe('unsupported_grant_type');
+        });
+
+        it('still reports unauthorized_client when the server supports the grant', async () => {
+            // The distinction is only useful if this case keeps its own error.
+            mockProvider.grantTypes = ['authorization_code', 'client_credentials'];
+            mockProvider.getClient = async () => ({ ...validClient, grant_types: ['authorization_code'] });
+
+            const response = await supertest(app).post('/token').type('form').send({
+                client_id: 'valid-client',
+                client_secret: 'valid-secret',
+                grant_type: 'client_credentials',
+            });
+
+            expect(response.status).toBe(400);
+            expect(response.body.error).toBe('unauthorized_client');
+        });
+    });
+
     describe('Client authentication', () => {
         it('requires valid client credentials', async () => {
             const response = await supertest(app).post('/token').type('form').send({
