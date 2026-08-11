@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { OAuthClientMetadataSchema } from '../schemas.js';
+import {
+    OAuthClientMetadataSchema,
+    OAuthMetadataSchema,
+    OAuthProtectedResourceMetadataSchema,
+    OpenIdProviderMetadataSchema,
+} from '../schemas.js';
 
 const baseMetadata = {
     redirect_uris: ['https://client.example.com/callback'],
@@ -54,5 +59,57 @@ describe('OAuthClientMetadataSchema URL fields', () => {
         for (const url of SCRIPT_SCHEMES) {
             expect(OAuthClientMetadataSchema.safeParse({ redirect_uris: [url] }).success).toBe(false);
         }
+    });
+});
+
+/**
+ * The metadata schemas are exported, so they are used to parse documents fetched from elsewhere -
+ * an authorization server's RFC 8414 document, or a resource server's RFC 9728 one - as well as to
+ * type what this server publishes. Anything a remote document can put in front of a user has to go
+ * through SafeUrlSchema; `z.string().url()` does not, since it accepts javascript: happily.
+ */
+describe('metadata schema URL fields', () => {
+    const validProtectedResource = { resource: 'https://mcp.example.com/mcp' };
+    const validAuthorizationServer = {
+        issuer: 'https://auth.example.com',
+        authorization_endpoint: 'https://auth.example.com/authorize',
+        token_endpoint: 'https://auth.example.com/token',
+        response_types_supported: ['code'],
+    };
+    const validOpenIdProvider = {
+        ...validAuthorizationServer,
+        jwks_uri: 'https://auth.example.com/jwks',
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+    };
+
+    const cases = [
+        ['OAuthProtectedResourceMetadata', OAuthProtectedResourceMetadataSchema, validProtectedResource, 'resource'],
+        ['OAuthProtectedResourceMetadata', OAuthProtectedResourceMetadataSchema, validProtectedResource, 'jwks_uri'],
+        ['OAuthProtectedResourceMetadata', OAuthProtectedResourceMetadataSchema, validProtectedResource, 'resource_documentation'],
+        ['OAuthProtectedResourceMetadata', OAuthProtectedResourceMetadataSchema, validProtectedResource, 'resource_policy_uri'],
+        ['OAuthProtectedResourceMetadata', OAuthProtectedResourceMetadataSchema, validProtectedResource, 'resource_tos_uri'],
+        ['OAuthMetadata', OAuthMetadataSchema, validAuthorizationServer, 'introspection_endpoint'],
+        ['OpenIdProviderMetadata', OpenIdProviderMetadataSchema, validOpenIdProvider, 'service_documentation'],
+    ] as const;
+
+    it.each(cases)('%s rejects a script scheme in %#: $3', (_name, schema, valid, field) => {
+        for (const url of SCRIPT_SCHEMES) {
+            expect(schema.safeParse({ ...valid, [field]: url }).success).toBe(false);
+        }
+    });
+
+    it('still accepts otherwise valid documents', () => {
+        expect(OAuthProtectedResourceMetadataSchema.safeParse(validProtectedResource).success).toBe(true);
+        expect(OAuthMetadataSchema.safeParse(validAuthorizationServer).success).toBe(true);
+        expect(OpenIdProviderMetadataSchema.safeParse(validOpenIdProvider).success).toBe(true);
+        expect(
+            OAuthProtectedResourceMetadataSchema.safeParse({
+                ...validProtectedResource,
+                resource_documentation: 'https://docs.example.com',
+                resource_policy_uri: 'https://example.com/privacy',
+                resource_tos_uri: 'https://example.com/tos',
+            }).success,
+        ).toBe(true);
     });
 });
