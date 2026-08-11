@@ -1,19 +1,22 @@
 {
   "name": "mcp-oauth-server",
-  "version": "0.0.6",
+  "version": "1.0.0",
   "description": "Self-hosted OAuth 2.1 Authorization Server for MCP servers (Express/TypeScript). Implements the MCP Authorization spec: Client ID Metadata Documents (CIMD), Dynamic Client Registration, PKCE, resource indicators, device flow.",
   "main": "dist/index.cjs",
   "module": "dist/index.js",
+  "types": "./dist/index.d.ts",
   "packageManager": "pnpm@10.22.0",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     }
   },
   "type": "module",
   "files": [
-    "./dist"
+    "./dist",
+    "./CHANGELOG.md"
   ],
   "scripts": {
     "test": "vitest run",

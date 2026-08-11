@@ -39,6 +39,9 @@ If you only need to **validate** tokens issued by an external identity provider,
 npm install mcp-oauth-server@latest --save-exact
 ```
 
+Upgrading from 0.0.x? `OAuthServerModel` changed, and a model missing a required method throws at
+construction rather than failing later. See [Migrating from 0.0.x](CHANGELOG.md#migrating-from-00x).
+
 ## Features
 
 - **MCP Authorization Spec compliant**: Aligns with the [MCP Authorization Spec](https://modelcontextprotocol.io/specification/draft/basic/authorization)
