@@ -22,6 +22,22 @@ const DeviceAuthorizationApprovalSchema = z.object({
     user_code: z.string().min(1),
 });
 
+/**
+ * Marks a pending device authorization as approved by the signed-in user.
+ *
+ * `user_code` is read from the request body only. It is a credential - whoever presents it
+ * decides which pending authorization gets bound to their account - and query strings end up in
+ * access logs, `Referer` headers, browser history and error trackers, none of which see bodies.
+ *
+ * **This route needs CSRF protection, and the library cannot provide it.** Approval is a state
+ * change whose acting identity comes from {@link ApproveDeviceAuthorizationHandlerOptions.getUser},
+ * meaning a session your application owns. Restricting the route to POST means `SameSite=Lax`
+ * and `Strict` cookies are not sent on a cross-site form submission, which covers most
+ * deployments - but this library cannot see how your session cookie is configured, and cookies
+ * with no explicit `SameSite` attribute are exempted from that protection for a couple of
+ * minutes by some browsers. Mount your own CSRF middleware ahead of this handler, and have your
+ * approval page submit the token it issues.
+ */
 export function approveDeviceAuthorizationHandler({
     provider,
     rateLimit: rateLimitConfig,
@@ -49,8 +65,7 @@ export function approveDeviceAuthorizationHandler({
 
     router.post('/', async (req, res) => {
         try {
-            const merged = { ...req.query, ...req.body };
-            const parseResult = DeviceAuthorizationApprovalSchema.safeParse(merged);
+            const parseResult = DeviceAuthorizationApprovalSchema.safeParse(req.body);
             if (!parseResult.success) {
                 throw new InvalidRequestError(parseResult.error.message);
             }

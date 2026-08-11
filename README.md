@@ -116,6 +116,12 @@ The auth router exposes **`POST /device`** (under your AS base path) when the de
 
 Wire **`approveDeviceAuthorizationHandler`** and **`denyDeviceAuthorizationHandler`** on routes you choose; they accept `user_code` (and resolve the authenticated user via `getUser`) so the user can approve or reject the device login out-of-band.
 
+Both read `user_code` from the request body only, never the query string - it is a credential, and query strings reach access logs, `Referer` headers and browser history where bodies do not. Your verification page should submit it as a form field.
+
+> **Mount your own CSRF middleware on the approval route.** Approval is a state change carried out under whatever session `getUser` reads, so it needs a token tied to that session. This library restricts the route to POST, which is enough for `SameSite=Lax` or `Strict` cookies to be withheld from a cross-site submission, but it cannot see how your session cookie is configured - and browsers exempt cookies with no explicit `SameSite` attribute from that protection for a short window. Only your application knows how to mint and check its own CSRF tokens.
+>
+> Note also that `denyDeviceAuthorizationHandler` identifies no user: anyone with a valid `user_code` can cancel that authorization. Denial grants nothing, so the worst case is a nuisance, but add authentication if you want only the signed-in user to be able to decline.
+
 ## Client ID Metadata Documents (CIMD)
 
 [Client ID Metadata Documents](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-client-id-metadata-document-00) let clients use an HTTPS URL as their `client_id`. The authorization server fetches a JSON metadata document from that URL (`client_id`, `client_name`, `redirect_uris`, ...) instead of requiring registration. The [draft MCP Authorization spec](https://modelcontextprotocol.io/specification/draft/basic/authorization/client-registration#client-id-metadata-documents) recommends CIMD and deprecates Dynamic Client Registration in its favor.

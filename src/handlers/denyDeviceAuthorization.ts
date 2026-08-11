@@ -18,6 +18,18 @@ const DeviceAuthorizationDenialSchema = z.object({
     user_code: z.string().min(1),
 });
 
+/**
+ * Marks a pending device authorization as denied.
+ *
+ * `user_code` is read from the request body only, for the reasons given on
+ * {@link approveDeviceAuthorizationHandler}, and that handler's note about CSRF protection
+ * applies to any route you expose alongside it.
+ *
+ * Unlike approval, denial identifies no user: anyone presenting a valid `user_code` can cancel
+ * that authorization. Denying cannot grant access, so the worst case is a nuisance for whoever
+ * started the flow, but add your own authentication if you would rather only the signed-in user
+ * could decline.
+ */
 export function denyDeviceAuthorizationHandler({
     provider,
     rateLimit: rateLimitConfig,
@@ -44,8 +56,7 @@ export function denyDeviceAuthorizationHandler({
 
     router.post('/', async (req, res) => {
         try {
-            const merged = { ...req.query, ...req.body };
-            const parseResult = DeviceAuthorizationDenialSchema.safeParse(merged);
+            const parseResult = DeviceAuthorizationDenialSchema.safeParse(req.body);
             if (!parseResult.success) {
                 throw new InvalidRequestError(parseResult.error.message);
             }
