@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `createOAuthMetadata` (and therefore `mcpAuthRouter`) now falls back to the provider's
+  `scopesSupported` for `scopes_supported`, the way the protected resource metadata already did.
+  A server that configured scopes only on `OAuthServer` advertised them in the protected resource
+  document but not in the authorization server document, so clients reading the latter (Codex,
+  Hermes Agent) saw no scopes.
+
 ## 1.0.0
 
 First stable release. It carries security fixes and a reworked `OAuthServerModel` contract, so

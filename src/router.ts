@@ -120,7 +120,9 @@ export const createOAuthMetadata = (options: {
         token_endpoint_auth_methods_supported: SUPPORTED_TOKEN_ENDPOINT_AUTH_METHODS,
         grant_types_supported,
 
-        scopes_supported: options.scopesSupported,
+        // Fall back to the provider's scopes so this document and the protected resource
+        // metadata (which already falls back) advertise the same scopes.
+        scopes_supported: options.scopesSupported ?? options.provider.scopesSupported,
 
         revocation_endpoint,
         // The revocation endpoint runs the same client authentication middleware.

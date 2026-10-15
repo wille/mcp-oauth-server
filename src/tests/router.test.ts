@@ -332,6 +332,20 @@ describe('MCP Auth Router', () => {
             expect(response.body.resource_name).toBe('Test API');
         });
 
+        it('advertises the provider scopes in both metadata documents when the router option is omitted', async () => {
+            const scopedApp = express();
+            const provider = { ...withIssuer(mockProvider, new URL('https://mcp.example.com')), scopesSupported: ['mcp', 'cli'] } as unknown as OAuthServer;
+            scopedApp.use(mcpAuthRouter({ provider }));
+
+            const authResponse = await supertest(scopedApp).get('/.well-known/oauth-authorization-server');
+            expect(authResponse.status).toBe(200);
+            expect(authResponse.body.scopes_supported).toEqual(['mcp', 'cli']);
+
+            const resourceResponse = await supertest(scopedApp).get('/.well-known/oauth-protected-resource');
+            expect(resourceResponse.status).toBe(200);
+            expect(resourceResponse.body.scopes_supported).toEqual(['mcp', 'cli']);
+        });
+
         it('handles path components in issuer URL', async () => {
             const app = express();
 
