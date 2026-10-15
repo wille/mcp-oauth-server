@@ -339,6 +339,21 @@ Endpoints (paths are relative to where you mount the router and to `baseUrl` / i
 
 Install at the application root (see [`src/router.ts`](src/router.ts)).
 
+#### Serving protected resource metadata for more than one path
+
+`mcpAuthRouter` serves one protected resource document, at the well-known path derived from `resourceServerUrl`. Clients following the MCP discovery order try the path of the MCP endpoint first and the root second, so a server that announces its metadata on the root and also hosts an endpoint at `/mcp` can serve the path-specific document too. `createOAuthMetadata` builds the authorization server metadata `mcpAuthMetadataRouter` needs for that:
+
+```ts
+import { createOAuthMetadata, mcpAuthMetadataRouter } from 'mcp-oauth-server';
+
+const oauthMetadata = createOAuthMetadata({ provider: oauthServer });
+
+app.use(mcpAuthRouter({ provider: oauthServer, resourceServerUrl: new URL('https://api.example.com/') }));
+app.use(mcpAuthMetadataRouter({ oauthMetadata, resourceServerUrl: new URL('https://api.example.com/mcp') }));
+```
+
+Each document advertises its own URL as `resource`, as RFC 9728 requires.
+
 ### authenticateHandler
 
 Handles user consent completion after your consent UI (authorization code flow).

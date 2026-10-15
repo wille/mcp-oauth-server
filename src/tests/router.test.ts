@@ -1,4 +1,4 @@
-import { mcpAuthRouter, AuthRouterOptions, mcpAuthMetadataRouter, AuthMetadataOptions } from '../router.js';
+import { mcpAuthRouter, AuthRouterOptions, mcpAuthMetadataRouter, AuthMetadataOptions, createOAuthMetadata } from '../router.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
 import { OAuthClientInformationFull, OAuthMetadata, OAuthTokenRevocationRequest, OAuthTokens } from '../schemas.js';
@@ -344,6 +344,27 @@ describe('MCP Auth Router', () => {
             const resourceResponse = await supertest(scopedApp).get('/.well-known/oauth-protected-resource');
             expect(resourceResponse.status).toBe(200);
             expect(resourceResponse.body.scopes_supported).toEqual(['mcp', 'cli']);
+        });
+
+        it('serves a second protected resource document mounted with createOAuthMetadata', async () => {
+            const provider = withIssuer(mockProvider, new URL('https://api.example.com'));
+            const multiApp = express();
+            multiApp.use(mcpAuthRouter({ provider, resourceServerUrl: new URL('https://api.example.com/') }));
+            multiApp.use(
+                mcpAuthMetadataRouter({
+                    oauthMetadata: createOAuthMetadata({ provider }),
+                    resourceServerUrl: new URL('https://api.example.com/mcp'),
+                }),
+            );
+
+            const rootResponse = await supertest(multiApp).get('/.well-known/oauth-protected-resource');
+            expect(rootResponse.status).toBe(200);
+            expect(rootResponse.body.resource).toBe('https://api.example.com/');
+
+            const pathResponse = await supertest(multiApp).get('/.well-known/oauth-protected-resource/mcp');
+            expect(pathResponse.status).toBe(200);
+            expect(pathResponse.body.resource).toBe('https://api.example.com/mcp');
+            expect(pathResponse.body.authorization_servers).toEqual(['https://api.example.com/']);
         });
 
         it('handles path components in issuer URL', async () => {

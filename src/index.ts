@@ -27,7 +27,7 @@ export type { DeviceAuthorizationHandlerOptions } from './handlers/device';
 export { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
 export { AuthorizationPendingError, SlowDownError, ExpiredTokenError, InvalidRequestError, OAuthError, ServerError } from './errors.js';
 
-export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter, mcpAuthMetadataRouter } from './router.js';
+export { getOAuthProtectedResourceMetadataUrl, mcpAuthRouter, mcpAuthMetadataRouter, createOAuthMetadata } from './router.js';
 export type { AuthRouterOptions, AuthMetadataOptions } from './router.js';
 export { requireBearerAuth } from './middleware/bearerAuth.js';
 export type { BearerAuthMiddlewareOptions } from './middleware/bearerAuth.js';

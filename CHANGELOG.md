@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
+
+### Added
+
+- `createOAuthMetadata` is exported, so a server can pass its authorization server metadata to
+  `mcpAuthMetadataRouter` and serve a protected resource document for a second path (for
+  example the root and `/mcp`) next to the one `mcpAuthRouter` mounts.
 
 ### Fixed
 
