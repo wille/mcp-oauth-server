@@ -4,6 +4,7 @@ import { OAuthServer } from '../OAuthServer.js';
 import { authenticateClient } from '../middleware/clientAuth.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
+import { parseScope } from '../scope.js';
 import { InvalidRequestError, ServerError, TooManyRequestsError, OAuthError, UnsupportedGrantTypeError } from '../errors.js';
 
 export type DeviceAuthorizationHandlerOptions = {
@@ -60,10 +61,9 @@ export function deviceAuthorizationHandler({ provider, rateLimit: rateLimitConfi
             }
 
             const { scope, resource } = parseResult.data;
-            const scopes = scope?.split(/\s+/).filter(Boolean);
 
             const body = await provider.requestDeviceAuthorization!(client, {
-                scopes: scopes?.length ? scopes : undefined,
+                scopes: parseScope(scope),
                 resource: resource ? new URL(resource) : undefined,
             });
 

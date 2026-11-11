@@ -6,6 +6,7 @@ import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { redirectUriMatches } from '../redirect-uri.js';
+import { parseScope } from '../scope.js';
 
 export type AuthenticationHandlerOptions = {
     provider: OAuthServer;
@@ -129,18 +130,14 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
             const { scope, code_challenge, resource } = parseResult.data;
             state = parseResult.data.state;
 
-            // Validate scopes
-            let requestedScopes: string[] = [];
-            if (scope !== undefined) {
-                requestedScopes = scope.split(' ');
-            }
-
             // All validation passed, proceed with authorization
             await provider.authenticate(
                 client,
                 {
                     state,
-                    scopes: requestedScopes,
+                    // undefined when the client sent no scope, so the provider applies the
+                    // server's default scopes instead of issuing a grant with none.
+                    scopes: parseScope(scope),
                     redirectUri: redirect_uri,
                     codeChallenge: code_challenge,
                     resource: resource ? new URL(resource) : undefined,

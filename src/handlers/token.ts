@@ -13,6 +13,7 @@ import {
     OAuthError,
 } from '../errors.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
+import { parseScope } from '../scope.js';
 
 export type TokenHandlerOptions = {
     provider: OAuthServer;
@@ -138,7 +139,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
 
                     const { refresh_token, scope, resource } = parseResult.data;
 
-                    const scopes = scope?.split(' ');
+                    const scopes = parseScope(scope);
                     const tokens = await provider.exchangeRefreshToken(
                         client,
                         refresh_token,
@@ -170,7 +171,7 @@ export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHand
                     }
 
                     const { scope, resource } = parseResult.data;
-                    const scopes = scope?.split(' ');
+                    const scopes = parseScope(scope);
                     const tokens = await provider.exchangeClientCredentials(client, scopes, resource ? new URL(resource) : undefined);
                     res.status(200).json(tokens);
                     break;

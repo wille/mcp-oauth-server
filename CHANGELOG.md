@@ -22,6 +22,13 @@
   instead of adding to it, so a client registered with `https://app.example/cb?tenant=acme` got
   its callback without `tenant`. RFC 6749 §3.1.2 requires the query to be retained; the error
   redirect already did.
+- An authorization request without a `scope` parameter was meant to default to every supported
+  scope, as `scopesSupported` documents, but the authorize and consent handlers passed an empty
+  list rather than "not specified". The resulting access token had no scopes at all and failed
+  any `requireBearerAuth({ requiredScopes })` check with 403. Clients that omit `scope` now get
+  the default, and the consent URL carries it so your consent screen can show it.
+- `scope` is split on any run of whitespace. An empty `scope=` or a doubled space used to produce
+  an empty-string scope and fail the request with `invalid_scope`.
 
 ## 1.0.1
 
