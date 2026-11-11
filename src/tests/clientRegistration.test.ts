@@ -17,6 +17,35 @@ describe('OAuthServer Client Registration', () => {
         });
     });
 
+    describe('redirect_uris must not include a fragment (RFC 6749 §3.1.2)', () => {
+        it.each(['https://client.example/callback#section', 'https://client.example/callback#', 'com.example.app:/callback#x'])(
+            'rejects %s',
+            async (uri) => {
+                await expect(
+                    oauthServer.registerClient({ redirect_uris: [uri], token_endpoint_auth_method: 'none' }),
+                ).rejects.toMatchObject({ errorCode: 'invalid_redirect_uri', message: expect.stringContaining('fragment') });
+            },
+        );
+
+        it('rejects a fragment even when insecure redirect URIs are allowed', async () => {
+            const lenient = new OAuthServer({
+                model: new MemoryOAuthServerModel(),
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                allowInsecureRedirectUris: true,
+            });
+
+            await expect(
+                lenient.registerClient({ redirect_uris: ['http://client.example/callback#x'], token_endpoint_auth_method: 'none' }),
+            ).rejects.toMatchObject({ errorCode: 'invalid_redirect_uri' });
+        });
+
+        it('still reports an insecure redirect URI as before', async () => {
+            await expect(
+                oauthServer.registerClient({ redirect_uris: ['http://client.example/callback'], token_endpoint_auth_method: 'none' }),
+            ).rejects.toMatchObject({ errorCode: 'invalid_redirect_uri', message: expect.stringContaining('must use https') });
+        });
+    });
+
     describe('client secret expiry', () => {
         const register = (options: { clientSecretLifetime?: number }) =>
             new OAuthServer({

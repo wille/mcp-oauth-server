@@ -69,6 +69,8 @@
   `getUser` returned no user. They now answer 401 `access_denied`.
 - `requireBearerAuth` escapes quotes and backslashes in the `WWW-Authenticate` parameters, so an
   error message from a custom verifier cannot break out of its quoted value.
+- A redirect URI containing a fragment is rejected at dynamic registration (`invalid_redirect_uri`)
+  and in Client ID Metadata Documents (`invalid_client`), as RFC 6749 §3.1.2 requires.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`

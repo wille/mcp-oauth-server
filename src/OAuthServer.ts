@@ -393,10 +393,8 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
      * private_key_jwt authentication is not supported by this server.
      */
     private validateClientIdMetadataDocument(client: OAuthClientInformationFull): void {
-        this.validateRedirectUris(client.redirect_uris, (uri) => {
-            throw new InvalidClientError(
-                `redirect_uri in client_id metadata document must use https, a loopback address, or a private-use URI scheme: ${uri}`,
-            );
+        this.validateRedirectUris(client.redirect_uris, (uri, reason) => {
+            throw new InvalidClientError(`redirect_uri in client_id metadata document ${reason}: ${uri}`);
         });
 
         if (client.token_endpoint_auth_method && client.token_endpoint_auth_method !== 'none') {
@@ -422,12 +420,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new UnsupportedGrantTypeError('dynamic client registration is not supported by this authorization server');
             }
 
-            this.validateRedirectUris(clientMetadata.redirect_uris, (uri) => {
+            this.validateRedirectUris(clientMetadata.redirect_uris, (uri, reason) => {
                 // RFC 7591 section 3.2.2 error code for a rejected redirect URI.
-                throw new CustomOAuthError(
-                    'invalid_redirect_uri',
-                    `redirect_uri must use https, a loopback address, or a private-use URI scheme: ${uri}`,
-                );
+                throw new CustomOAuthError('invalid_redirect_uri', `redirect_uri ${reason}: ${uri}`);
             });
 
             const isPublicClient = clientMetadata.token_endpoint_auth_method === 'none';
@@ -1256,21 +1251,30 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     }
 
     /**
-     * Rejects redirect URIs that would carry the authorization response over cleartext http,
-     * per OAuth 2.1 §2.3.1, unless {@link allowInsecureRedirectUris} is set.
+     * Rejects redirect URIs that include a fragment, and those that would carry the
+     * authorization response over cleartext http, per OAuth 2.1 §2.3.1, unless
+     * {@link allowInsecureRedirectUris} is set.
      *
      * The caller supplies `reject` because the two registration paths report this with
      * different error codes: RFC 7591 defines `invalid_redirect_uri` for dynamic
      * registration, while a Client ID Metadata Document failure is an `invalid_client`.
      */
-    private validateRedirectUris(redirectUris: string[], reject: (uri: string) => never): void {
+    private validateRedirectUris(redirectUris: string[], reject: (uri: string, reason: string) => never): void {
+        // RFC 6749 §3.1.2: the redirection endpoint URI MUST NOT include a fragment component.
+        // Not a transport question, so allowInsecureRedirectUris does not relax it. Checked on
+        // the string because a bare trailing '#' parses to an empty URL.hash.
+        const withFragment = redirectUris.find((uri) => uri.includes('#'));
+        if (withFragment !== undefined) {
+            reject(withFragment, 'must not include a fragment');
+        }
+
         if (this.allowInsecureRedirectUris) {
             return;
         }
 
         const insecure = redirectUris.find((uri) => !isSecureRedirectUri(uri));
         if (insecure !== undefined) {
-            reject(insecure);
+            reject(insecure, 'must use https, a loopback address, or a private-use URI scheme');
         }
     }
 
