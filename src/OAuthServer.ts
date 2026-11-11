@@ -17,6 +17,7 @@ import {
     AuthorizationPendingError,
     ExpiredTokenError,
     InvalidClientError,
+    InvalidClientMetadataError,
     InvalidGrantError,
     InvalidRequestError,
     InvalidScopeError,
@@ -463,6 +464,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new CustomOAuthError('unsupported_token_endpoint_auth_method', 'Unsupported token_endpoint_auth_method');
             }
 
+            // RFC 6749 §4.4: the client credentials grant MUST only be used by confidential
+            // clients. The grant's whole proof of identity is the client authenticating, and a
+            // public client has nothing to authenticate with - registering one for this grant
+            // would let anyone holding its client_id mint tokens.
+            if (isPublicClient && client.grant_types?.includes('client_credentials')) {
+                throw new InvalidClientMetadataError(
+                    "client_credentials requires a confidential client: token_endpoint_auth_method must not be 'none'",
+                );
+            }
+
             return await this.model.registerClient!(client);
         } catch (error) {
             this.errorHandler('registerClient', error, { clientMetadata });
@@ -772,6 +783,13 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             }
             if (!client.grant_types?.includes('client_credentials')) {
                 throw new UnauthorizedClientError('Client is not authorized to use client_credentials grant');
+            }
+            // Enforced here as well as at registration, because clients also come from Client ID
+            // Metadata Documents (always public) and from the model, which the library does not
+            // vet. `authenticateClient` only checks a secret when the client has one, so a
+            // client without a secret reaches this point unauthenticated.
+            if (!client.client_secret) {
+                throw new UnauthorizedClientError('client_credentials grant requires a confidential client');
             }
 
             const validatedScopes = this.validateScope(scopes);

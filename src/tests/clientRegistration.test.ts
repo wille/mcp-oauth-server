@@ -199,7 +199,7 @@ describe('OAuthServer Client Registration', () => {
                     redirect_uris: ['http://localhost:3000/callback'],
                     grant_types: ['authorization_code', 'client_credentials'],
                     response_types: ['code'],
-                    token_endpoint_auth_method: 'none' as const,
+                    token_endpoint_auth_method: 'client_secret_post' as const,
                 };
 
                 const registered = await oauthServer.registerClient!(clientMetadata);

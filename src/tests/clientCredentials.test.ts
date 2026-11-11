@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { OAuthClientInformationFull } from '../schemas.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
-import { InvalidTargetError, UnauthorizedClientError } from '../errors.js';
+import { InvalidClientMetadataError, InvalidTargetError, UnauthorizedClientError } from '../errors.js';
 import { createTestClient } from './test-helpers.js';
 
 describe('OAuthServer.exchangeClientCredentials', () => {
@@ -24,7 +24,38 @@ describe('OAuthServer.exchangeClientCredentials', () => {
         client = createTestClient({
             grant_types: ['client_credentials'],
             token_endpoint_auth_method: 'client_secret_post',
+            client_secret: 'test-secret',
         });
+    });
+
+    it('rejects a client without a secret (RFC 6749 §4.4: confidential clients only)', async () => {
+        const publicClient = createTestClient({
+            grant_types: ['client_credentials'],
+            token_endpoint_auth_method: 'none',
+        });
+
+        await expect(oauthServer.exchangeClientCredentials(publicClient, ['mcp:tools'])).rejects.toThrow(UnauthorizedClientError);
+    });
+
+    it('refuses to register a public client for client_credentials', async () => {
+        await expect(
+            oauthServer.registerClient({
+                redirect_uris: [],
+                grant_types: ['client_credentials'],
+                token_endpoint_auth_method: 'none',
+            }),
+        ).rejects.toThrow(InvalidClientMetadataError);
+    });
+
+    it('registers a confidential client for client_credentials', async () => {
+        const registered = await oauthServer.registerClient({
+            redirect_uris: [],
+            grant_types: ['client_credentials'],
+            token_endpoint_auth_method: 'client_secret_post',
+        });
+
+        expect(registered.client_secret).toBeDefined();
+        await expect(oauthServer.exchangeClientCredentials(registered, ['mcp:tools'])).resolves.toMatchObject({ token_type: 'bearer' });
     });
 
     it('issues an access token without refresh token', async () => {

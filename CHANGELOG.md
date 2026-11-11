@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **Public clients could use the `client_credentials` grant.** A client registered with
+  `token_endpoint_auth_method: 'none'` and `grant_types: ['client_credentials']` - or resolved from
+  a Client ID Metadata Document listing that grant - holds no secret, so the token endpoint issued
+  it an access token carrying every supported scope to anyone who knew its `client_id`. With
+  dynamic client registration enabled that was anyone at all. RFC 6749 §4.4 restricts the grant to
+  confidential clients: registration now answers `invalid_client_metadata` to that combination,
+  and `exchangeClientCredentials` answers `unauthorized_client` to any client without a
+  `client_secret`, wherever it came from.
+
 ## 1.0.1
 
 ### Added
