@@ -533,15 +533,18 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             const authorizationCode = this.generateToken();
 
-            const searchParams = new URLSearchParams({
-                code: authorizationCode,
-            });
+            // RFC 6749 §3.1.2: a query component on the redirect URI MUST be retained when the
+            // response parameters are added, so set them on the existing query rather than
+            // replacing it. A client registered as `https://app/cb?tenant=acme` relies on
+            // getting `tenant` back.
+            const targetUrl = new URL(params.redirectUri);
+            targetUrl.searchParams.set('code', authorizationCode);
             if (params.state) {
-                searchParams.set('state', params.state);
+                targetUrl.searchParams.set('state', params.state);
             }
             if (this.issuerUrl) {
                 // RFC 9207: identify the authorization server in the authorization response
-                searchParams.set('iss', this.issuerUrl.href);
+                targetUrl.searchParams.set('iss', this.issuerUrl.href);
             }
 
             await this.model.saveAuthorizationCode!(
@@ -562,8 +565,6 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 client,
             );
 
-            const targetUrl = new URL(params.redirectUri);
-            targetUrl.search = searchParams.toString();
             log('authenticate', { params, targetUrl });
             res.redirect(targetUrl.toString());
         } catch (error) {

@@ -18,6 +18,10 @@
 - `clientSecretLifetime: 0` is documented as "never expire" but was read with `||`, so it silently
   became the 90-day default. It now yields `client_secret_expires_at: 0`, as RFC 7591 §3.2.1
   specifies for a secret that does not expire.
+- The successful authorization redirect replaced the query string of the client's `redirect_uri`
+  instead of adding to it, so a client registered with `https://app.example/cb?tenant=acme` got
+  its callback without `tenant`. RFC 6749 §3.1.2 requires the query to be retained; the error
+  redirect already did.
 
 ## 1.0.1
 

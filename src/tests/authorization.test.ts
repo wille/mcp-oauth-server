@@ -253,6 +253,24 @@ describe('OAuthServer Authorization Code Flow', () => {
     });
 
     describe('authenticate', () => {
+        it('keeps the query string of the registered redirect_uri (RFC 6749 §3.1.2)', async () => {
+            const redirectUri = 'https://app.example/callback?tenant=acme';
+            const tenantClient = createTestClient({ redirect_uris: [redirectUri] });
+
+            await oauthServer.authenticate(
+                tenantClient,
+                { redirectUri, codeChallenge: 'test-challenge', state: 'xyz' },
+                'user-123',
+                mockResponse,
+            );
+
+            const redirectUrl = new URL(mockRedirect.mock.calls[0][0]);
+            expect(redirectUrl.origin + redirectUrl.pathname).toBe('https://app.example/callback');
+            expect(redirectUrl.searchParams.get('tenant')).toBe('acme');
+            expect(redirectUrl.searchParams.get('code')).toBeTruthy();
+            expect(redirectUrl.searchParams.get('state')).toBe('xyz');
+        });
+
         it('should create authorization code and redirect to callback', async () => {
             const params = {
                 redirectUri: 'http://localhost:3000/callback',
