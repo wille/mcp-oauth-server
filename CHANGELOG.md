@@ -102,6 +102,8 @@
   refresh token was stored with the subset, so the client could never get the other scopes back
   without sending the user through authorization again. The subset now applies to the access
   token only, and the rotated refresh token keeps the granted scopes, as RFC 6749 §6 specifies.
+- `engines` now says Node 18.17 or later. The package already needed it - `URL.canParse` is called
+  on every authorization request and does not exist before 18.17 - but declared `>=18`.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`
