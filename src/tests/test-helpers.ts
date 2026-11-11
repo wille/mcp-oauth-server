@@ -15,6 +15,15 @@ export function generatePKCEPair(): { codeVerifier: string; codeChallenge: strin
 }
 
 /**
+ * A well-formed PKCE pair for tests that need the parameters to pass validation but do not
+ * exercise the check itself. These are the example values from RFC 7636 Appendix B.
+ */
+export const TEST_CODE_VERIFIER = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+export const TEST_CODE_CHALLENGE = 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM';
+/** Well-formed, but not the verifier for {@link TEST_CODE_CHALLENGE}. */
+export const TEST_WRONG_CODE_VERIFIER = 'wrong-verifier-wrong-verifier-wrong-verifier';
+
+/**
  * Create a standard test client configuration
  */
 export function createTestClient(overrides?: Partial<OAuthClientInformationFull>): OAuthClientInformationFull {

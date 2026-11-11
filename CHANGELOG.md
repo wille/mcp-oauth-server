@@ -71,6 +71,11 @@
   error message from a custom verifier cannot break out of its quoted value.
 - A redirect URI containing a fragment is rejected at dynamic registration (`invalid_redirect_uri`)
   and in Client ID Metadata Documents (`invalid_client`), as RFC 6749 §3.1.2 requires.
+- `code_challenge` and `code_verifier` are checked against the formats RFC 7636 defines: a
+  43-character base64url challenge, and a verifier of 43 to 128 unreserved characters. A malformed
+  challenge is now refused at the authorization endpoint instead of producing a code that could
+  never be redeemed, and a client using a too-short verifier is told so. Conforming clients are
+  unaffected.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`

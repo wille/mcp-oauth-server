@@ -8,7 +8,7 @@ import { InvalidTokenError } from '../errors.js';
 import { requireBearerAuth } from '../middleware/bearerAuth.js';
 import { authenticateHandler } from '../handlers/authenticate.js';
 import { approveDeviceAuthorizationHandler } from '../handlers/approveDeviceAuthorization.js';
-import { createTestClient } from './test-helpers.js';
+import { createTestClient, TEST_CODE_CHALLENGE } from './test-helpers.js';
 
 describe('requireBearerAuth answers 401 for a token that is no longer acceptable', () => {
     const resource = 'https://rs.example.com/mcp';
@@ -105,7 +105,7 @@ describe('handlers answer 401 when nobody is signed in', () => {
         const response = await supertest(app).post('/confirm').type('form').send({
             client_id: client.client_id,
             response_type: 'code',
-            code_challenge: 'challenge',
+            code_challenge: TEST_CODE_CHALLENGE,
             code_challenge_method: 'S256',
         });
 

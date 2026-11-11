@@ -7,6 +7,7 @@ import express, { Response } from 'express';
 import supertest from 'supertest';
 import { InvalidGrantError, InvalidTokenError } from '../../errors.js';
 import { AuthInfo, AuthorizationParams } from '../../types.js';
+import { TEST_CODE_VERIFIER, TEST_WRONG_CODE_VERIFIER } from '../test-helpers.js';
 
 const mockTokens = {
     access_token: 'mock_access_token',
@@ -58,7 +59,7 @@ describe('Token Handler', () => {
                 codeVerifier?: string,
             ): Promise<OAuthTokens> {
                 if (authorizationCode === 'valid_code') {
-                    if (codeVerifier !== undefined && codeVerifier !== 'valid_verifier') {
+                    if (codeVerifier !== undefined && codeVerifier !== TEST_CODE_VERIFIER) {
                         throw new InvalidGrantError('code_verifier does not match the challenge');
                     }
                     return mockTokens;
@@ -252,7 +253,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(200);
@@ -266,7 +267,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 // Missing code
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(400);
@@ -292,7 +293,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'invalid_verifier',
+                code_verifier: TEST_WRONG_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(400);
@@ -306,7 +307,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'expired_code',
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(400);
@@ -321,7 +322,7 @@ describe('Token Handler', () => {
                 resource: 'https://api.example.com/resource',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(200);
@@ -332,7 +333,7 @@ describe('Token Handler', () => {
             expect(mockExchangeCode).toHaveBeenCalledWith(
                 validClient,
                 'valid_code',
-                'valid_verifier',
+                TEST_CODE_VERIFIER,
                 undefined, // redirect_uri
                 new URL('https://api.example.com/resource'), // resource parameter
             );
@@ -345,7 +346,7 @@ describe('Token Handler', () => {
                 codeVerifier?: string,
             ): Promise<OAuthTokens> => {
                 if (authorizationCode === 'valid_code') {
-                    if (codeVerifier !== undefined && codeVerifier !== 'valid_verifier') {
+                    if (codeVerifier !== undefined && codeVerifier !== TEST_CODE_VERIFIER) {
                         throw new InvalidGrantError('code_verifier does not match the challenge');
                     }
                     return mockTokensWithIdToken;
@@ -358,7 +359,7 @@ describe('Token Handler', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             expect(response.status).toBe(200);

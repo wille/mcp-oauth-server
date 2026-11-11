@@ -6,6 +6,7 @@ import express, { Response } from 'express';
 import supertest from 'supertest';
 import { AuthInfo, AuthorizationParams } from '../../types.js';
 import { InvalidTokenError } from '../../errors.js';
+import { TEST_CODE_CHALLENGE } from '../test-helpers.js';
 
 describe('Authorization Handler', () => {
     // Mock client data
@@ -98,7 +99,7 @@ describe('Authorization Handler', () => {
             const response = await supertest(app).get('/authorize').query({
                 client_id: 'valid-client',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -111,7 +112,7 @@ describe('Authorization Handler', () => {
             const response = await supertest(app).get('/authorize').query({
                 client_id: 'multi-redirect-client',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -123,7 +124,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://malicious.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -135,7 +136,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -149,7 +150,7 @@ describe('Authorization Handler', () => {
                 client_id: 'loopback-client',
                 redirect_uri: 'http://127.0.0.1:51234/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -163,7 +164,7 @@ describe('Authorization Handler', () => {
                 client_id: 'loopback-client',
                 redirect_uri: 'http://localhost:51234/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -175,7 +176,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com:8443/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -189,7 +190,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'token', // invalid - we only support code flow
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -217,7 +218,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'plain', // Only S256 is supported
             });
 
@@ -235,7 +236,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'token', // invalid - triggers error redirect
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -254,7 +255,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
                 resource: 'https://api.example.com/resource',
             });
@@ -265,7 +266,7 @@ describe('Authorization Handler', () => {
                 expect.objectContaining({
                     resource: new URL('https://api.example.com/resource'),
                     redirectUri: 'https://example.com/callback',
-                    codeChallenge: 'challenge123',
+                    codeChallenge: TEST_CODE_CHALLENGE,
                 }),
                 expect.any(Object),
             );
@@ -278,7 +279,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
                 scope: 'profile email',
                 state: 'xyz789',
@@ -296,7 +297,7 @@ describe('Authorization Handler', () => {
                 client_id: 'valid-client',
                 redirect_uri: 'https://example.com/callback',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
                 state: 'state-value-123',
             });
@@ -310,7 +311,7 @@ describe('Authorization Handler', () => {
             const response = await supertest(app).post('/authorize').type('form').send({
                 client_id: 'valid-client',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 

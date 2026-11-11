@@ -7,6 +7,7 @@ import { AccessDeniedError, InvalidRequestError, InvalidClientError, ServerError
 import { OAuthServer } from '../OAuthServer.js';
 import { redirectUriMatches } from '../redirect-uri.js';
 import { parseScope } from '../scope.js';
+import { CodeChallengeSchema } from '../pkce.js';
 import { describeValidationError } from '../validation.js';
 
 export type AuthenticationHandlerOptions = {
@@ -35,7 +36,7 @@ const ClientAuthorizationParamsSchema = z.object({
 // Parameters that must be validated for a successful authorization request. Failure can be reported to the redirect URI.
 const RequestAuthorizationParamsSchema = z.object({
     response_type: z.literal('code'),
-    code_challenge: z.string(),
+    code_challenge: CodeChallengeSchema,
     code_challenge_method: z.literal('S256'),
     scope: z.string().optional(),
     state: z.string().optional(),

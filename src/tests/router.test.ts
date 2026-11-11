@@ -6,6 +6,7 @@ import express, { Response } from 'express';
 import supertest from 'supertest';
 import { AuthInfo, AuthorizationParams } from '../types.js';
 import { InvalidTokenError } from '../errors.js';
+import { TEST_CODE_CHALLENGE, TEST_CODE_VERIFIER } from './test-helpers.js';
 
 describe('MCP Auth Router', () => {
     // Setup mock provider with full capabilities
@@ -409,7 +410,7 @@ describe('MCP Auth Router', () => {
             const response = await supertest(app).get('/authorize').query({
                 client_id: 'valid-client',
                 response_type: 'code',
-                code_challenge: 'challenge123',
+                code_challenge: TEST_CODE_CHALLENGE,
                 code_challenge_method: 'S256',
             });
 
@@ -424,7 +425,7 @@ describe('MCP Auth Router', () => {
                 client_secret: 'valid-secret',
                 grant_type: 'authorization_code',
                 code: 'valid_code',
-                code_verifier: 'valid_verifier',
+                code_verifier: TEST_CODE_VERIFIER,
             });
 
             // The request will fail in testing due to mocking limitations,

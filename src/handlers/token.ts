@@ -14,6 +14,7 @@ import {
 } from '../errors.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
 import { parseScope } from '../scope.js';
+import { CodeVerifierSchema } from '../pkce.js';
 import { describeValidationError } from '../validation.js';
 
 export type TokenHandlerOptions = {
@@ -55,7 +56,7 @@ const TokenRequestSchema = z.object({
 
 const AuthorizationCodeGrantSchema = z.object({
     code: z.string(),
-    code_verifier: z.string(),
+    code_verifier: CodeVerifierSchema,
     redirect_uri: z.string().optional(),
     resource: z.string().url().optional(),
 });
