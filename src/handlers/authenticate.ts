@@ -7,6 +7,7 @@ import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsEr
 import { OAuthServer } from '../OAuthServer.js';
 import { redirectUriMatches } from '../redirect-uri.js';
 import { parseScope } from '../scope.js';
+import { describeValidationError } from '../validation.js';
 
 export type AuthenticationHandlerOptions = {
     provider: OAuthServer;
@@ -95,7 +96,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
             const result = ClientAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
 
             if (!result.success) {
-                throw new InvalidRequestError(result.error.message);
+                throw new InvalidRequestError(describeValidationError(result.error));
             }
 
             client_id = result.data.client_id;
@@ -145,7 +146,7 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
             // Parse and validate authorization parameters
             const parseResult = RequestAuthorizationParamsSchema.safeParse(req.method === 'POST' ? req.body : req.query);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             const { scope, code_challenge, resource } = parseResult.data;

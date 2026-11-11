@@ -3,6 +3,7 @@ import { OAuthClientMetadataSchema } from './schemas.js';
 import { ClientIdMetadataDocument } from './types.js';
 import { InvalidClientError } from './errors.js';
 import debug from 'debug';
+import { describeValidationError } from './validation.js';
 
 const log = debug('oauth:cimd');
 
@@ -146,7 +147,7 @@ export class ClientIdMetadataDocumentFetcher {
 
         const result = ClientIdMetadataDocumentSchema.safeParse(json);
         if (!result.success) {
-            throw new InvalidClientError(`Invalid client_id metadata document: ${result.error.message}`);
+            throw new InvalidClientError(`Invalid client_id metadata document: ${describeValidationError(result.error)}`);
         }
 
         if (result.data.client_id !== clientId) {

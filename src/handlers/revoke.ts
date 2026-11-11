@@ -5,6 +5,7 @@ import { OAuthTokenRevocationRequestSchema } from '../schemas.js';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
+import { describeValidationError } from '../validation.js';
 
 export type RevocationHandlerOptions = {
     provider: OAuthServer;
@@ -49,7 +50,7 @@ export function revocationHandler({ provider, rateLimit: rateLimitConfig }: Revo
         try {
             const parseResult = OAuthTokenRevocationRequestSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             const client = req.client;

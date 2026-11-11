@@ -4,6 +4,7 @@ import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { OAuthServer } from '../OAuthServer.js';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, OAuthError, ServerError, TooManyRequestsError } from '../errors.js';
+import { describeValidationError } from '../validation.js';
 
 export type DenyDeviceAuthorizationHandlerOptions = {
     provider: Pick<OAuthServer, 'denyDeviceAuthorization'>;
@@ -58,7 +59,7 @@ export function denyDeviceAuthorizationHandler({
         try {
             const parseResult = DeviceAuthorizationDenialSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             await provider.denyDeviceAuthorization(parseResult.data.user_code);

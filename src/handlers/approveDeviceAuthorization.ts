@@ -4,6 +4,7 @@ import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { OAuthServer } from '../OAuthServer.js';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidRequestError, OAuthError, ServerError, TooManyRequestsError } from '../errors.js';
+import { describeValidationError } from '../validation.js';
 
 export type ApproveDeviceAuthorizationHandlerOptions = {
     provider: OAuthServer;
@@ -67,7 +68,7 @@ export function approveDeviceAuthorizationHandler({
         try {
             const parseResult = DeviceAuthorizationApprovalSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             const userId = await getUser(req);

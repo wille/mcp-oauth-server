@@ -5,6 +5,7 @@ import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { InvalidClientMetadataError, ServerError, TooManyRequestsError, OAuthError, UnsupportedGrantTypeError } from '../errors.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
+import { describeValidationError } from '../validation.js';
 
 export type ClientRegistrationHandlerOptions = {
     /**
@@ -50,7 +51,7 @@ export function clientRegistrationHandler({ provider, rateLimit: rateLimitConfig
         try {
             const parseResult = OAuthClientMetadataSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidClientMetadataError(parseResult.error.message);
+                throw new InvalidClientMetadataError(describeValidationError(parseResult.error));
             }
 
             const clientInfo = await provider.registerClient!(parseResult.data);

@@ -14,6 +14,7 @@ import {
 } from '../errors.js';
 import { DEVICE_AUTHORIZATION_GRANT_TYPE } from '../deviceFlow.js';
 import { parseScope } from '../scope.js';
+import { describeValidationError } from '../validation.js';
 
 export type TokenHandlerOptions = {
     provider: OAuthServer;
@@ -136,7 +137,7 @@ export function tokenHandler({
         try {
             const parseResult = TokenRequestSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             const { grant_type } = parseResult.data;
@@ -164,7 +165,7 @@ export function tokenHandler({
                     assertClientSupportsGrant(client, 'authorization_code');
                     const parseResult = AuthorizationCodeGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
-                        throw new InvalidRequestError(parseResult.error.message);
+                        throw new InvalidRequestError(describeValidationError(parseResult.error));
                     }
 
                     const { code, code_verifier, redirect_uri, resource } = parseResult.data;
@@ -184,7 +185,7 @@ export function tokenHandler({
                     assertClientSupportsGrant(client, 'refresh_token');
                     const parseResult = RefreshTokenGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
-                        throw new InvalidRequestError(parseResult.error.message);
+                        throw new InvalidRequestError(describeValidationError(parseResult.error));
                     }
 
                     const { refresh_token, scope, resource } = parseResult.data;
@@ -204,7 +205,7 @@ export function tokenHandler({
                     assertClientSupportsGrant(client, DEVICE_AUTHORIZATION_GRANT_TYPE);
                     const parseResult = DeviceCodeGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
-                        throw new InvalidRequestError(parseResult.error.message);
+                        throw new InvalidRequestError(describeValidationError(parseResult.error));
                     }
                     const { device_code } = parseResult.data;
                     const tokens = await provider.exchangeDeviceCode(client, device_code);
@@ -217,7 +218,7 @@ export function tokenHandler({
 
                     const parseResult = ClientCredentialsGrantSchema.safeParse(req.body);
                     if (!parseResult.success) {
-                        throw new InvalidRequestError(parseResult.error.message);
+                        throw new InvalidRequestError(describeValidationError(parseResult.error));
                     }
 
                     const { scope, resource } = parseResult.data;

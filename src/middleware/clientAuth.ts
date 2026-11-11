@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { OAuthRegisteredClientsStore } from '../clients.js';
 import { OAuthClientInformationFull } from '../schemas.js';
 import { InvalidRequestError, InvalidClientError, ServerError, OAuthError } from '../errors.js';
+import { describeValidationError } from '../validation.js';
 
 export type ClientAuthenticationMiddlewareOptions = {
     /**
@@ -47,7 +48,7 @@ export function authenticateClient({ clientsStore }: ClientAuthenticationMiddlew
             // there and deliberately not implemented.
             const result = ClientAuthenticatedRequestSchema.safeParse(req.body);
             if (!result.success) {
-                throw new InvalidRequestError(String(result.error));
+                throw new InvalidRequestError(describeValidationError(result.error));
             }
             const { client_id, client_secret } = result.data;
 

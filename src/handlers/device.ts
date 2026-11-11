@@ -6,6 +6,7 @@ import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
 import { parseScope } from '../scope.js';
 import { InvalidRequestError, ServerError, TooManyRequestsError, OAuthError, UnsupportedGrantTypeError } from '../errors.js';
+import { describeValidationError } from '../validation.js';
 
 export type DeviceAuthorizationHandlerOptions = {
     provider: OAuthServer;
@@ -52,7 +53,7 @@ export function deviceAuthorizationHandler({ provider, rateLimit: rateLimitConfi
         try {
             const parseResult = DeviceAuthorizationRequestSchema.safeParse(req.body);
             if (!parseResult.success) {
-                throw new InvalidRequestError(parseResult.error.message);
+                throw new InvalidRequestError(describeValidationError(parseResult.error));
             }
 
             const client = req.client;

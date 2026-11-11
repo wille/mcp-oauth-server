@@ -57,6 +57,10 @@
   counted by their own limiter, sized from `devicePollIntervalSeconds` (360 per 15 minutes at the
   default), and no longer count against the general token limit. Tune or disable it with the new
   `tokenOptions.devicePollRateLimit`; `rateLimit: false` still disables both.
+- `error_description` for a malformed request was the validator's raw output: a multi-line JSON
+  array of issues, which is unreadable once percent-encoded into an authorization error redirect
+  and contains characters RFC 6749 §5.2 does not permit there. It is now one line naming each
+  offending parameter, for example `response_type: Invalid input: expected 'code'`.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`
