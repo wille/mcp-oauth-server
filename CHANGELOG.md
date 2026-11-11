@@ -26,6 +26,11 @@
   that still lets you correlate events. `DEBUG=oauth:*` output is redacted the same way. If your
   handler read a token or secret from this context, it no longer can.
 
+- The minimum `zod` version is now 4.6.6, which fixes a memory exhaustion issue when validating
+  oversized input (reported by `pnpm audit` against zod < 4.6.6).
+  Request bodies reach zod on every endpoint, so the old `^4.1.13` range let an install resolve to
+  an affected version.
+
 ### Added
 
 - `revokeGrantOnRefreshTokenReuse`: opt-in refresh token reuse detection (OAuth 2.1 §4.3.1). When
