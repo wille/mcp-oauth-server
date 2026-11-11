@@ -3,6 +3,7 @@ import debug from 'debug';
 import { OAuthServerModel } from './OAuthServerModel';
 import { AccessToken, RefreshToken, AuthorizationCode, DeviceAuthorization, ClientIdMetadataDocument, GrantId } from './types';
 import { normalizeDeviceUserCode } from './deviceFlow';
+import { redactClient } from './redact';
 
 const log = debug('oauth:MemoryOAuthServerModel');
 
@@ -113,7 +114,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     async registerClient(clientMetadata: OAuthClientInformationFull) {
-        log('registerClient', clientMetadata);
+        log('registerClient', redactClient(clientMetadata));
 
         this.clients.set(clientMetadata.client_id, clientMetadata);
         return clientMetadata;

@@ -17,6 +17,14 @@
   a consent screen. The handler's documentation and the README now carry the same warning the
   device approval handler already had, with an example. No code changed: if your consent route has
   no CSRF check and your session cookie is not `SameSite=Lax` or `Strict`, add one.
+- **`errorHandler` and debug logging were given live credentials.** The context passed to
+  `errorHandler` included the full client record with its `client_secret`, and the raw
+  authorization code, PKCE verifier, refresh token, device code or token being revoked. An
+  application forwarding that to a log aggregator or error tracker was storing usable credentials
+  there - and several of these errors fire while the credential is still valid. Secrets and device
+  user codes are now `[redacted]`, and tokens and codes are replaced by a `sha256:` fingerprint
+  that still lets you correlate events. `DEBUG=oauth:*` output is redacted the same way. If your
+  handler read a token or secret from this context, it no longer can.
 
 ### Fixed
 

@@ -35,6 +35,7 @@ import { DEVICE_AUTHORIZATION_GRANT_TYPE, generateDeviceCode, generateDeviceUser
 import { OAuthServerModel } from './OAuthServerModel';
 import { MemoryOAuthServerModel } from './MemoryOAuthServerModel';
 import { validateChallenge } from './pkce';
+import { fingerprint, redactErrorContext } from './redact';
 import { ClientIdMetadataDocumentFetcher, ClientIdMetadataDocumentOptions, isClientIdMetadataDocumentUrl } from './cimd';
 
 const log = debug('oauth:OAuthServer');
@@ -173,7 +174,15 @@ export interface OAuthServerOptions {
     modifyAuthorizationRedirectUrl?: (url: URL, client: OAuthClientInformationFull, params: AuthorizationParams) => Promise<void> | void;
 
     /**
-     * The auth router may swallow errors thrown in OAuthServer methods.
+     * Called with every error thrown inside an OAuthServer method, before it is rethrown. The
+     * auth router turns those errors into OAuth error responses, so this is the place to log
+     * them.
+     *
+     * `params` describes the request that failed. Credentials are removed from it first, so it
+     * is safe to forward to a logger or error tracker: a client's `client_secret` and a device
+     * `user_code` are replaced with `[redacted]`, and authorization codes, PKCE verifiers,
+     * refresh tokens, device codes and revoked tokens with a `sha256:` fingerprint that
+     * identifies the value without being usable in its place.
      */
     errorHandler?: ErrorHandler;
 
@@ -373,7 +382,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             return await this.model.getClient!(clientId);
         } catch (error) {
-            this.errorHandler('getClient', error, { clientId });
+            this.reportError('getClient', error, { clientId });
             throw error;
         }
     }
@@ -477,7 +486,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             return await this.model.registerClient!(client);
         } catch (error) {
-            this.errorHandler('registerClient', error, { clientMetadata });
+            this.reportError('registerClient', error, { clientMetadata });
             throw error;
         }
     }
@@ -513,7 +522,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             log('authorize', url.href);
             res.redirect(url.toString());
         } catch (error) {
-            this.errorHandler('authorize', error, { client, params });
+            this.reportError('authorize', error, { client, params });
             throw error;
         }
     }
@@ -565,10 +574,11 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 client,
             );
 
-            log('authenticate', { params, targetUrl });
+            // Not targetUrl itself: its query now carries the authorization code.
+            log('authenticate', { params, redirectUri: params.redirectUri });
             res.redirect(targetUrl.toString());
         } catch (error) {
-            this.errorHandler('authenticate', error, { client, params, userId });
+            this.reportError('authenticate', error, { client, params, userId });
             throw error;
         }
     }
@@ -666,8 +676,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             log('exchangeAuthorizationCode', {
                 clientId: client.client_id,
                 userId: codeData.userId,
-                authorizationCode,
-                codeVerifier,
+                authorizationCode: fingerprint(authorizationCode),
                 redirectUri,
                 resource,
             });
@@ -680,7 +689,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scope: (codeData.scopes || []).join(' '),
             };
         } catch (error) {
-            this.errorHandler('exchangeAuthorizationCode', error, {
+            this.reportError('exchangeAuthorizationCode', error, {
                 client,
                 authorizationCode,
                 codeVerifier,
@@ -782,7 +791,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scope: (scopes || []).join(' '),
             };
         } catch (error) {
-            this.errorHandler('exchangeRefreshToken', error, {
+            this.reportError('exchangeRefreshToken', error, {
                 client,
                 refreshToken,
                 scopes,
@@ -830,7 +839,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 scope: (validatedScopes || []).join(' '),
             };
         } catch (error) {
-            this.errorHandler('exchangeClientCredentials', error, {
+            this.reportError('exchangeClientCredentials', error, {
                 client,
                 scopes,
                 resource,
@@ -850,7 +859,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new InvalidTokenError('Token has expired');
             }
 
-            log('verifyAccessToken', { tokenData });
+            log('verifyAccessToken', { ...tokenData, token: fingerprint(tokenData.token) });
 
             this.validateScope(tokenData.scopes);
             this.validateResource(tokenData.resource);
@@ -864,7 +873,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 userId: tokenData.userId,
             };
         } catch (error) {
-            this.errorHandler('verifyAccessToken', error);
+            this.reportError('verifyAccessToken', error);
             throw error;
         }
     }
@@ -877,7 +886,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new InvalidRequestError('Unsupported token_type_hint');
             }
 
-            log('revokeToken', { client, request });
+            log('revokeToken', redactErrorContext({ client, request }));
 
             // token_type_hint is only a hint. RFC 7009 section 2.1 requires the search to
             // extend across every supported token type when the hint fails to locate the
@@ -903,7 +912,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 await this.model.revokeGrant(revokedRefreshToken.grantId);
             }
         } catch (error) {
-            this.errorHandler('revokeToken', error, { client, request });
+            this.reportError('revokeToken', error, { client, request });
             throw error;
         }
     }
@@ -960,7 +969,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             const verificationUriComplete = new URL(this.deviceAuthorizationUrl.href);
             verificationUriComplete.searchParams.set('user_code', userCode);
 
-            log('requestDeviceAuthorization', { clientId: client.client_id, userCode, expiresAt });
+            log('requestDeviceAuthorization', { clientId: client.client_id, expiresAt });
 
             return {
                 device_code: deviceCode,
@@ -971,7 +980,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 interval: this.devicePollIntervalSeconds,
             };
         } catch (error) {
-            this.errorHandler('requestDeviceAuthorization', error, { client, params });
+            this.reportError('requestDeviceAuthorization', error, { client, params });
             throw error;
         }
     }
@@ -1056,7 +1065,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             await this.recordDevicePoll(device, now, device.pollIntervalSeconds);
             throw new AuthorizationPendingError('The authorization request is still pending');
         } catch (error) {
-            this.errorHandler('exchangeDeviceCode', error, { client, deviceCode });
+            this.reportError('exchangeDeviceCode', error, { client, deviceCode });
             throw error;
         }
     }
@@ -1091,7 +1100,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             log('approveDeviceAuthorization', { userId, clientId: approved.clientId });
         } catch (error) {
-            this.errorHandler('approveDeviceAuthorization', error, { userCode, userId });
+            this.reportError('approveDeviceAuthorization', error, { userCode, userId });
             throw error;
         }
     }
@@ -1124,7 +1133,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             log('denyDeviceAuthorization', { clientId: denied.clientId });
         } catch (error) {
-            this.errorHandler('denyDeviceAuthorization', error, { userCode });
+            this.reportError('denyDeviceAuthorization', error, { userCode });
             throw error;
         }
     }
@@ -1181,6 +1190,14 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         await this.model.saveRefreshToken(refreshToken, client);
 
         return refreshToken.token;
+    }
+
+    /**
+     * Hands an error to the configured {@link errorHandler} with credentials removed from its
+     * context - see {@link redactErrorContext}.
+     */
+    private reportError(step: Parameters<ErrorHandler>[0], error: unknown, params?: Record<string, unknown>): void {
+        this.errorHandler(step, error as Error, redactErrorContext(params));
     }
 
     /**
