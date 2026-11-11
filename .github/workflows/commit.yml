@@ -1,6 +1,14 @@
 name: Commit
 on:
     push:
+        branches: [master]
+    # Without this, a pull request from a fork is never tested: push only fires for branches
+    # in this repository.
+    pull_request:
+
+# Nothing here writes to the repository, so the token should not be able to either.
+permissions:
+    contents: read
 
 jobs:
     check:
@@ -18,6 +26,9 @@ jobs:
                   cache: pnpm
             - name: Installing dependencies
               run: pnpm install --frozen-lockfile
+            # Production dependencies only: those are what a consumer of the package installs.
+            - name: Audit
+              run: pnpm audit --prod --audit-level high
             - name: Test
               run: pnpm test
             - name: Typecheck
