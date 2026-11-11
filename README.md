@@ -401,6 +401,21 @@ app.post(
 - `getUser`: (required) Returns the authenticated user id (string or promise).
 - `rateLimit`: (optional) `express-rate-limit` options, or `false` to disable.
 
+> **Mount your own CSRF middleware on this route.** A request to it _is_ the user's consent. The handler verifies the client and its redirect URI, but it cannot know that the user ever saw your consent screen: every parameter comes from the request, and with dynamic client registration or CIMD enabled anyone can register a client. A page on another site that makes the user's browser submit a form here, with the user's session cookie attached, receives an authorization code for the attacker's own client - PKCE, `state` and `iss` offer nothing when the attacker is the client.
+>
+> The route is POST-only, which keeps `SameSite=Lax` and `Strict` cookies off a cross-site submission, but the library cannot see how your session cookie is configured. Check a token tied to the session before the handler runs:
+>
+> ```ts
+> app.post(
+>     '/confirm',
+>     authenticateUserMiddleware(),
+>     verifyCsrfToken(), // yours: compares a form field against a value stored in the session
+>     authenticateHandler({ provider: oauthServer, getUser: (req) => req.session?.userId }),
+> );
+> ```
+>
+> Rejecting requests whose `Sec-Fetch-Site` header is `cross-site` is a useful second layer when your consent screen is served from the same site as this route. The same applies to [`approveDeviceAuthorizationHandler`](#device-authorization-rfc-8628).
+
 ### requireBearerAuth
 
 Validates `Authorization: Bearer` tokens for protected routes (for example your MCP HTTP endpoint).

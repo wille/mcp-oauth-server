@@ -41,6 +41,27 @@ const RequestAuthorizationParamsSchema = z.object({
     resource: z.string().url().optional(),
 });
 
+/**
+ * Completes the authorization code flow: issues a code for the user {@link AuthenticationHandlerOptions.getUser}
+ * returns and redirects back to the client. Your consent screen posts to this route when the
+ * user approves.
+ *
+ * **This route needs CSRF protection, and the library cannot provide it.** A request here *is*
+ * the user's consent. The handler checks that the client and redirect URI are registered, but
+ * it has no way to know that the user saw your consent screen, let alone agreed to it: every
+ * parameter is supplied by the request, and with dynamic client registration or Client ID
+ * Metadata Documents enabled an attacker can register a client of their own. A page on another
+ * site that gets the user's browser to submit a form to this route, carrying the user's session
+ * cookie, obtains an authorization code for the attacker's client and with it access to the
+ * user's account. PKCE, `state` and `iss` do not help when the attacker is the client.
+ *
+ * The route is POST-only, so `SameSite=Lax` and `Strict` session cookies are not sent on such a
+ * submission, which covers most deployments - but this library cannot see how your session
+ * cookie is configured, and cookies with no explicit `SameSite` attribute are exempted from
+ * that protection for a couple of minutes by some browsers. Mount your own CSRF middleware
+ * ahead of this handler and have your consent page submit the token it issues, exactly as for
+ * {@link approveDeviceAuthorizationHandler}.
+ */
 export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getUser }: AuthenticationHandlerOptions): RequestHandler {
     // Create a router to apply middleware
     const router = express.Router();

@@ -12,6 +12,11 @@
   confidential clients: registration now answers `invalid_client_metadata` to that combination,
   and `exchangeClientCredentials` answers `unauthorized_client` to any client without a
   `client_secret`, wherever it came from.
+- **`authenticateHandler` needs CSRF protection from your application, and the documentation did
+  not say so.** A POST to it is the user's consent, and nothing in the request proves the user saw
+  a consent screen. The handler's documentation and the README now carry the same warning the
+  device approval handler already had, with an example. No code changed: if your consent route has
+  no CSRF check and your session cookie is not `SameSite=Lax` or `Strict`, add one.
 
 ### Fixed
 
