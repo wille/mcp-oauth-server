@@ -425,6 +425,13 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new CustomOAuthError('invalid_redirect_uri', `redirect_uri ${reason}: ${uri}`);
             });
 
+            // RFC 7591 §2: an omitted token_endpoint_auth_method means client_secret_basic,
+            // which this server does not accept. Leaving it out of the response would tell a
+            // client reading the spec literally to authenticate in a way that fails. §3.2.1
+            // lets the server substitute its own value as long as it returns it, so say what
+            // will actually work.
+            clientMetadata.token_endpoint_auth_method ??= 'client_secret_post';
+
             const isPublicClient = clientMetadata.token_endpoint_auth_method === 'none';
 
             // Generate client credentials

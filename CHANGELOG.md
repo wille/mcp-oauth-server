@@ -76,6 +76,9 @@
   challenge is now refused at the authorization endpoint instead of producing a code that could
   never be redeemed, and a client using a too-short verifier is told so. Conforming clients are
   unaffected.
+- The dynamic registration response states `token_endpoint_auth_method: 'client_secret_post'` when
+  the client did not ask for a method. Omitting it means `client_secret_basic` under RFC 7591,
+  which this server does not accept.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`

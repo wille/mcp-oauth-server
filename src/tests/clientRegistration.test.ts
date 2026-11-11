@@ -46,6 +46,34 @@ describe('OAuthServer Client Registration', () => {
         });
     });
 
+    describe('token_endpoint_auth_method in the registration response', () => {
+        it('is client_secret_post when the client did not state one', async () => {
+            const client = await oauthServer.registerClient({ redirect_uris: ['http://localhost:3000/callback'] });
+
+            expect(client.token_endpoint_auth_method).toBe('client_secret_post');
+            expect(client.client_secret).toBeDefined();
+        });
+
+        it('echoes none for a public client, which gets no secret', async () => {
+            const client = await oauthServer.registerClient({
+                redirect_uris: ['http://localhost:3000/callback'],
+                token_endpoint_auth_method: 'none',
+            });
+
+            expect(client.token_endpoint_auth_method).toBe('none');
+            expect(client.client_secret).toBeUndefined();
+        });
+
+        it('still rejects a method the server does not support', async () => {
+            await expect(
+                oauthServer.registerClient({
+                    redirect_uris: ['http://localhost:3000/callback'],
+                    token_endpoint_auth_method: 'client_secret_basic',
+                }),
+            ).rejects.toMatchObject({ errorCode: 'unsupported_token_endpoint_auth_method' });
+        });
+    });
+
     describe('client secret expiry', () => {
         const register = (options: { clientSecretLifetime?: number }) =>
             new OAuthServer({
