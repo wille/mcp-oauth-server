@@ -9,7 +9,21 @@ const log = debug('oauth:MemoryOAuthServerModel');
 
 const MAX_CLIENT_ID_METADATA_DOCUMENTS = 1000;
 
+/** How often, at most, a write also sweeps out expired records. */
+const SWEEP_INTERVAL_MS = 60 * 1000;
+
+/**
+ * Keeps everything in process memory. For development and tests: records are lost on restart
+ * and are not shared between instances, so a deployment with more than one process, or one
+ * that restarts, needs a real {@link OAuthServerModel}.
+ *
+ * Expired tokens, codes, device authorizations and cached metadata documents are swept out as
+ * new ones are written, so a long-running process does not grow without bound. Registered
+ * clients are kept indefinitely.
+ */
 export class MemoryOAuthServerModel implements OAuthServerModel {
+    private lastSweepAtMs = Date.now();
+
     private accessTokens = new Map<string, AccessToken>();
     private refreshTokens = new Map<string, RefreshToken>();
     private clients = new Map<string, OAuthClientInformationFull>();
@@ -18,7 +32,42 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     private deviceCodeByUserCode = new Map<string, string>();
     private clientIdMetadataDocuments = new Map<string, ClientIdMetadataDocument>();
 
+    /**
+     * Delete every record whose `expiresAt` has passed. Returns how many were removed.
+     *
+     * Runs by itself as records are written; call it directly if you want it on a schedule.
+     */
+    purgeExpired(now: Date = new Date()): number {
+        let removed = 0;
+        const sweep = <T extends { expiresAt: Date }>(records: Map<string, T>, onRemove?: (record: T) => void) => {
+            for (const [key, record] of records) {
+                if (record.expiresAt <= now) {
+                    records.delete(key);
+                    onRemove?.(record);
+                    removed++;
+                }
+            }
+        };
+
+        sweep(this.accessTokens);
+        sweep(this.refreshTokens);
+        sweep(this.authorizationCodes);
+        sweep(this.clientIdMetadataDocuments);
+        sweep(this.deviceByDeviceCode, (device) => this.deviceCodeByUserCode.delete(normalizeDeviceUserCode(device.userCode)));
+
+        this.lastSweepAtMs = Date.now();
+        return removed;
+    }
+
+    /** Sweeps on the way in to a write, at most once per {@link SWEEP_INTERVAL_MS}. */
+    private sweepIfDue(): void {
+        if (Date.now() - this.lastSweepAtMs >= SWEEP_INTERVAL_MS) {
+            this.purgeExpired();
+        }
+    }
+
     async saveAuthorizationCode(params: AuthorizationCode, _client?: OAuthClientInformationFull): Promise<void> {
+        this.sweepIfDue();
         this.authorizationCodes.set(params.authorizationCode, params);
     }
 
@@ -33,6 +82,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     async saveAccessToken(token: AccessToken, client: OAuthClientInformationFull): Promise<void> {
+        this.sweepIfDue();
         this.accessTokens.set(token.token, token);
     }
 
@@ -69,6 +119,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     async saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void> {
+        this.sweepIfDue();
         this.refreshTokens.set(token.token, token);
     }
 
@@ -121,6 +172,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     async saveClientIdMetadataDocument(document: ClientIdMetadataDocument): Promise<void> {
+        this.sweepIfDue();
         if (this.clientIdMetadataDocuments.size >= MAX_CLIENT_ID_METADATA_DOCUMENTS) {
             this.clientIdMetadataDocuments.delete(this.clientIdMetadataDocuments.keys().next().value!);
         }
@@ -132,6 +184,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     async saveDeviceAuthorization(device: DeviceAuthorization): Promise<void> {
+        this.sweepIfDue();
         const key = normalizeDeviceUserCode(device.userCode);
         this.deviceByDeviceCode.set(device.deviceCode, device);
         this.deviceCodeByUserCode.set(key, device.deviceCode);

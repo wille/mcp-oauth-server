@@ -81,6 +81,8 @@ type ErrorHandler = (
     params?: any,
 ) => void;
 
+let warnedAboutMemoryModel = false;
+
 const defaultErrorHandler: ErrorHandler = (step, error, params) => {
     log(`error: ${step}`, error, params);
 };
@@ -276,6 +278,16 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     devicePollIntervalSeconds: number;
 
     constructor(options: OAuthServerOptions) {
+        if (!options.model && process.env.NODE_ENV === 'production' && !warnedAboutMemoryModel) {
+            // Once per process. emitWarning rather than console.warn so it can be silenced
+            // with --no-warnings or handled through process.on('warning').
+            warnedAboutMemoryModel = true;
+            process.emitWarning(
+                'OAuthServer was created without a `model`, so it stores clients and tokens in process memory. ' +
+                    'They are lost on restart and are not shared between instances. Pass your own OAuthServerModel in production.',
+                { code: 'MCP_OAUTH_MEMORY_MODEL' },
+            );
+        }
         this.model = options.model || new MemoryOAuthServerModel();
         this.authorizationUrl = options.authorizationUrl;
         this.scopesSupported = options.scopesSupported;

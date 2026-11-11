@@ -237,7 +237,7 @@ const oauthServer = new OAuthServer({
 
 **Options**
 
-- `model`: (optional) Storage backend. Default: `MemoryOAuthServerModel`.
+- `model`: (optional) Storage backend. Default: `MemoryOAuthServerModel`. The default keeps everything in process memory - lost on restart, not shared between instances - so pass your own in production; omitting it under `NODE_ENV=production` emits a one-time `MCP_OAUTH_MEMORY_MODEL` warning.
 - `issuerUrl`: (required when using `mcpAuthRouter`) Authorization server issuer identifier (HTTPS in production; localhost is allowed for development). Used as the metadata `issuer` and appended as the RFC 9207 `iss` parameter on authorization responses.
 - `authorizationUrl`: (required) Redirect URL for interactive authorization (consent). Required when `authorization_code` is enabled.
 - `resourceServerUrl`: (optional) MCP resource server URL; used for resource validation and metadata when set.

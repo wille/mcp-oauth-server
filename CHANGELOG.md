@@ -79,6 +79,12 @@
 - The dynamic registration response states `token_endpoint_auth_method: 'client_secret_post'` when
   the client did not ask for a method. Omitting it means `client_secret_basic` under RFC 7591,
   which this server does not accept.
+- `MemoryOAuthServerModel` kept every expired token, authorization code and device authorization
+  until the process exited. It now sweeps expired records as new ones are written, and has a
+  `purgeExpired()` method.
+- Creating an `OAuthServer` without a `model` under `NODE_ENV=production` emits a one-time
+  `MCP_OAUTH_MEMORY_MODEL` warning: the in-memory default loses everything on restart and is not
+  shared between instances.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`
