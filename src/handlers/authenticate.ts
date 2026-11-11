@@ -3,7 +3,7 @@ import * as z from 'zod/v4';
 import express from 'express';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { allowedMethods } from '../middleware/allowedMethods.js';
-import { InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
+import { AccessDeniedError, InvalidRequestError, InvalidClientError, ServerError, TooManyRequestsError, OAuthError } from '../errors.js';
 import { OAuthServer } from '../OAuthServer.js';
 import { redirectUriMatches } from '../redirect-uri.js';
 import { parseScope } from '../scope.js';
@@ -120,7 +120,10 @@ export function authenticateHandler({ provider, rateLimit: rateLimitConfig, getU
 
             user = await getUser(req);
             if (!user) {
-                throw new ServerError('Invalid user');
+                // Nobody is signed in. That is the caller's situation to fix, not a fault in
+                // this server, so it must not be reported as a 500.
+                res.status(401).json(new AccessDeniedError('No authenticated user').toResponseObject());
+                return;
             }
         } catch (error) {
             // Pre-redirect errors - return direct response

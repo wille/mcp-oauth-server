@@ -103,13 +103,18 @@ export function requireBearerAuth({
             next();
         } catch (error) {
             // Build WWW-Authenticate header parts
+            // Each value is a quoted-string (RFC 9110 §5.6.4). A message from a custom verifier
+            // may contain anything, and an unescaped quote would end the value early and let
+            // the rest be read as further parameters; a line break would not survive as a
+            // header at all.
+            const quote = (value: string): string => `"${value.replace(/[\r\n]+/g, ' ').replace(/(["\\])/g, '\\$1')}"`;
             const buildWwwAuthHeader = (errorCode: string, message: string): string => {
-                let header = `Bearer error="${errorCode}", error_description="${message}"`;
+                let header = `Bearer error=${quote(errorCode)}, error_description=${quote(message)}`;
                 if (requiredScopes.length > 0) {
-                    header += `, scope="${requiredScopes.join(' ')}"`;
+                    header += `, scope=${quote(requiredScopes.join(' '))}`;
                 }
                 if (resourceMetadataUrl) {
-                    header += `, resource_metadata="${resourceMetadataUrl}"`;
+                    header += `, resource_metadata=${quote(resourceMetadataUrl)}`;
                 }
                 return header;
             };

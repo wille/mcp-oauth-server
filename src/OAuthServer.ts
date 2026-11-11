@@ -861,8 +861,26 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             log('verifyAccessToken', { ...tokenData, token: fingerprint(tokenData.token) });
 
-            this.validateScope(tokenData.scopes);
-            this.validateResource(tokenData.resource);
+            // A stored token can stop being acceptable without expiring: a scope is removed
+            // from scopesSupported, or resourceServerUrl changes. validateScope and
+            // validateResource describe that in the vocabulary of a token *request*
+            // (invalid_scope, invalid_target), which a resource server would relay as a 400 the
+            // client cannot act on. To the party presenting the token there is one thing wrong
+            // - the token is no good - and RFC 6750 §3.1 has a code for it. invalid_token
+            // makes requireBearerAuth answer 401 with a challenge, which is what prompts a
+            // client to authorize again.
+            try {
+                this.validateScope(tokenData.scopes);
+                this.validateResource(tokenData.resource);
+            } catch (error) {
+                if (error instanceof InvalidScopeError) {
+                    throw new InvalidTokenError('Token carries a scope this server no longer supports');
+                }
+                if (error instanceof InvalidTargetError) {
+                    throw new InvalidTokenError('Token was not issued for this resource');
+                }
+                throw error;
+            }
 
             return {
                 token,

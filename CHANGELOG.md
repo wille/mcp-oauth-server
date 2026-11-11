@@ -61,6 +61,14 @@
   array of issues, which is unreadable once percent-encoded into an authorization error redirect
   and contains characters RFC 6749 §5.2 does not permit there. It is now one line naming each
   offending parameter, for example `response_type: Invalid input: expected 'code'`.
+- `OAuthServer.verifyAccessToken` rejected a token whose scope had been removed from
+  `scopesSupported`, or whose resource no longer matched `resourceServerUrl`, with `invalid_scope`
+  / `invalid_target`. `requireBearerAuth` relayed those as a bare 400, which gives a client no
+  reason to re-authorize. Both are now `invalid_token`: 401 with a `WWW-Authenticate` challenge.
+- `authenticateHandler` and `approveDeviceAuthorizationHandler` answered 500 `server_error` when
+  `getUser` returned no user. They now answer 401 `access_denied`.
+- `requireBearerAuth` escapes quotes and backslashes in the `WWW-Authenticate` parameters, so an
+  error message from a custom verifier cannot break out of its quoted value.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`

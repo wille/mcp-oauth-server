@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { OAuthServer } from '../OAuthServer.js';
 import { MemoryOAuthServerModel } from '../MemoryOAuthServerModel.js';
-import { InvalidScopeError, InvalidTargetError } from '../errors.js';
+import { InvalidTokenError } from '../errors.js';
 import type { OAuthClientInformationFull } from '../schemas.js';
 import type { AccessToken } from '../types.js';
 import { createTestClient } from './test-helpers.js';
@@ -76,7 +76,7 @@ describe('OAuthServer.verifyAccessToken', () => {
 
         await model.saveAccessToken(accessToken, client);
 
-        await expect(oauthServer.verifyAccessToken('token-invalid-scope')).rejects.toThrow(InvalidScopeError);
+        await expect(oauthServer.verifyAccessToken('token-invalid-scope')).rejects.toThrow(InvalidTokenError);
     });
 
     it('should throw error when resource does not match mcpServerUrl', async () => {
@@ -98,7 +98,7 @@ describe('OAuthServer.verifyAccessToken', () => {
 
         await model.saveAccessToken(accessToken, client);
 
-        await expect(resourceServer.verifyAccessToken('token-wrong-resource')).rejects.toThrow(InvalidTargetError);
+        await expect(resourceServer.verifyAccessToken('token-wrong-resource')).rejects.toThrow(InvalidTokenError);
     });
 
     it('should accept token with resource matching mcpServerUrl', async () => {
@@ -145,7 +145,7 @@ describe('OAuthServer.verifyAccessToken', () => {
 
         await model.saveAccessToken(accessToken, client);
 
-        await expect(resourceServer.verifyAccessToken('token-correct-resource')).rejects.toThrow(InvalidTargetError);
+        await expect(resourceServer.verifyAccessToken('token-correct-resource')).rejects.toThrow(InvalidTokenError);
     });
 
     it('should accept token without resource when mcpServerUrl is not configured', async () => {

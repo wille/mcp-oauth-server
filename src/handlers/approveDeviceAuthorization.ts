@@ -3,7 +3,7 @@ import * as z from 'zod/v4';
 import { rateLimit, Options as RateLimitOptions } from 'express-rate-limit';
 import { OAuthServer } from '../OAuthServer.js';
 import { allowedMethods } from '../middleware/allowedMethods.js';
-import { InvalidRequestError, OAuthError, ServerError, TooManyRequestsError } from '../errors.js';
+import { AccessDeniedError, InvalidRequestError, OAuthError, ServerError, TooManyRequestsError } from '../errors.js';
 import { describeValidationError } from '../validation.js';
 
 export type ApproveDeviceAuthorizationHandlerOptions = {
@@ -73,7 +73,10 @@ export function approveDeviceAuthorizationHandler({
 
             const userId = await getUser(req);
             if (!userId) {
-                throw new ServerError('Invalid user');
+                // Nobody is signed in. That is the caller's situation to fix, not a fault in
+                // this server, so it must not be reported as a 500.
+                res.status(401).json(new AccessDeniedError('No authenticated user').toResponseObject());
+                return;
             }
 
             await provider.approveDeviceAuthorization(parseResult.data.user_code, userId);
