@@ -177,4 +177,34 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
      * every use, so both rules from {@link consumeAuthorizationCode} apply here unchanged.
      */
     consumeRefreshToken?(refreshToken: string, clientId: string): Promise<RefreshToken | undefined>;
+
+    /**
+     * Look up a refresh token that {@link consumeRefreshToken} has **already consumed**, scoped
+     * to `clientId`. Returns `undefined` for a token that is unknown, still valid, or belongs
+     * to another client.
+     *
+     * Required when {@link OAuthServerOptions.revokeGrantOnRefreshTokenReuse} is enabled, and
+     * only called then. It is how the library tells a replayed token from a random string, and
+     * it needs the record's {@link GrantId} to know what to revoke.
+     *
+     * Supporting it means consuming by marking rather than deleting:
+     *
+     * ```sql
+     * -- consumeRefreshToken
+     * UPDATE refresh_tokens SET consumed_at = now()
+     *  WHERE token = $1 AND client_id = $2 AND consumed_at IS NULL
+     *  RETURNING *
+     *
+     * -- getConsumedRefreshToken
+     * SELECT * FROM refresh_tokens
+     *  WHERE token = $1 AND client_id = $2 AND consumed_at IS NOT NULL
+     * ```
+     *
+     * Two things follow. {@link saveRefreshToken} must clear `consumed_at` when it is handed a
+     * token that already exists, because the library puts a token back after rejecting a
+     * malformed refresh request - otherwise the client's corrected retry would be read as a
+     * replay. And consumed rows should be removed once `expires_at` has passed; there is
+     * nothing left to protect after that.
+     */
+    getConsumedRefreshToken?(refreshToken: string, clientId: string): Promise<RefreshToken | undefined>;
 }

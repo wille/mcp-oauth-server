@@ -143,6 +143,27 @@ export interface OAuthServerOptions {
     refreshTokenLifetime?: number;
 
     /**
+     * Revoke the whole grant when a refresh token that has already been used is presented again.
+     *
+     * Refresh tokens are rotated on every use, so a second presentation of the same one means
+     * two parties hold it: the client, and whoever copied it. The server cannot tell which of
+     * them is asking, so OAuth 2.1 §4.3.1 has it revoke the tokens descended from that
+     * authorization - the thief's and the client's alike - and the user authorizes again.
+     *
+     * Off by default because legitimate clients replay too. A client that retries after losing
+     * the response to a refresh, or that shares one refresh token between several processes
+     * refreshing at the same moment, presents a used token without any theft involved. Without
+     * this option the loser of that race gets `invalid_grant` and the winner carries on; with
+     * it, both are signed out. Enable it when your clients refresh from a single place.
+     *
+     * Requires {@link OAuthServerModel.getConsumedRefreshToken}, which means your model has to
+     * keep consumed refresh tokens instead of deleting them.
+     *
+     * @default false
+     */
+    revokeGrantOnRefreshTokenReuse?: boolean;
+
+    /**
      * The lifetime of the authorization code in seconds.
      *
      * @default 5 minutes
@@ -263,6 +284,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
     refreshTokenLifetime: number;
     clientSecretLifetime: number;
     authorizationCodeLifetime: number;
+    revokeGrantOnRefreshTokenReuse: boolean;
     strictResource: boolean;
     resourceServerUrl?: URL;
     issuerUrl?: URL;
@@ -296,6 +318,7 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         // ?? rather than ||: 0 is a documented value meaning the secret never expires.
         this.clientSecretLifetime = options.clientSecretLifetime ?? 3 * 30 * 24 * 60 * 60;
         this.authorizationCodeLifetime = options.authorizationCodeLifetime || 5 * 60;
+        this.revokeGrantOnRefreshTokenReuse = options.revokeGrantOnRefreshTokenReuse ?? false;
         this.strictResource = options.strictResource ?? true;
         this.resourceServerUrl = options.resourceServerUrl ? resourceUrlFromServerUrl(options.resourceServerUrl) : undefined;
         this.issuerUrl = options.issuerUrl;
@@ -337,6 +360,10 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             if (!m.consumeRefreshToken) {
                 throw new Error('refresh_token grant requires OAuthServerModel method: consumeRefreshToken');
             }
+        }
+
+        if (this.revokeGrantOnRefreshTokenReuse && !m.getConsumedRefreshToken) {
+            throw new Error('revokeGrantOnRefreshTokenReuse requires OAuthServerModel method: getConsumedRefreshToken');
         }
 
         if (this.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE)) {
@@ -732,7 +759,9 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             // scoped to the client for the same reasons as exchangeAuthorizationCode.
             const refreshTokenData = await this.model.consumeRefreshToken!(refreshToken, client.client_id);
             if (!refreshTokenData) {
-                // Unknown, already used, or issued to a different client.
+                // Unknown, already used, or issued to a different client. The response is the
+                // same for all three; only "already used" has a consequence.
+                await this.revokeGrantIfRefreshTokenReused(refreshToken, client);
                 throw new InvalidGrantError('Invalid refresh token');
             }
 
@@ -1256,6 +1285,27 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
         log('model has no recordDeviceAuthorizationPoll: saving the whole device authorization, which can overwrite a concurrent approval');
         await this.model.saveDeviceAuthorization!({ ...device, lastPollResponseAtMs, pollIntervalSeconds });
+    }
+
+    /**
+     * Implements {@link OAuthServerOptions.revokeGrantOnRefreshTokenReuse}: if `refreshToken`
+     * is one this client has already redeemed, revoke everything issued under its grant.
+     *
+     * A token that carries no {@link GrantId} predates grant tracking and has nothing to
+     * cascade to, so it is left as an ordinary invalid_grant.
+     */
+    private async revokeGrantIfRefreshTokenReused(refreshToken: string, client: OAuthClientInformationFull): Promise<void> {
+        if (!this.revokeGrantOnRefreshTokenReuse) {
+            return;
+        }
+
+        const consumed = await this.model.getConsumedRefreshToken!(refreshToken, client.client_id);
+        if (!consumed?.grantId) {
+            return;
+        }
+
+        log('refresh token reuse detected, revoking grant', { clientId: client.client_id, grantId: consumed.grantId });
+        await this.model.revokeGrant(consumed.grantId);
     }
 
     /**

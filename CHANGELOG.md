@@ -26,6 +26,14 @@
   that still lets you correlate events. `DEBUG=oauth:*` output is redacted the same way. If your
   handler read a token or secret from this context, it no longer can.
 
+### Added
+
+- `revokeGrantOnRefreshTokenReuse`: opt-in refresh token reuse detection (OAuth 2.1 §4.3.1). When
+  a refresh token that has already been rotated is presented again, every access and refresh token
+  issued under the same authorization is revoked. Off by default, because clients that retry after
+  a lost response or refresh from several processes at once replay tokens legitimately. Needs the
+  new `getConsumedRefreshToken` model method; `MemoryOAuthServerModel` implements it.
+
 ### Fixed
 
 - `clientSecretLifetime: 0` is documented as "never expire" but was read with `||`, so it silently

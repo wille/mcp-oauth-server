@@ -26,6 +26,8 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
     private accessTokens = new Map<string, AccessToken>();
     private refreshTokens = new Map<string, RefreshToken>();
+    /** Refresh tokens that were redeemed, kept until they would have expired. See {@link getConsumedRefreshToken}. */
+    private consumedRefreshTokens = new Map<string, RefreshToken>();
     private clients = new Map<string, OAuthClientInformationFull>();
     private authorizationCodes = new Map<string, AuthorizationCode>();
     private deviceByDeviceCode = new Map<string, DeviceAuthorization>();
@@ -51,6 +53,7 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
         sweep(this.accessTokens);
         sweep(this.refreshTokens);
+        sweep(this.consumedRefreshTokens);
         sweep(this.authorizationCodes);
         sweep(this.clientIdMetadataDocuments);
         sweep(this.deviceByDeviceCode, (device) => this.deviceCodeByUserCode.delete(normalizeDeviceUserCode(device.userCode)));
@@ -120,6 +123,8 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
 
     async saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void> {
         this.sweepIfDue();
+        // A token being put back after a rejected request is live again, not a replay.
+        this.consumedRefreshTokens.delete(token.token);
         this.refreshTokens.set(token.token, token);
     }
 
@@ -157,7 +162,13 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
             return undefined;
         }
         this.refreshTokens.delete(refreshToken);
+        this.consumedRefreshTokens.set(refreshToken, token);
         return token;
+    }
+
+    async getConsumedRefreshToken(refreshToken: string, clientId: string): Promise<RefreshToken | undefined> {
+        const token = this.consumedRefreshTokens.get(refreshToken);
+        return token?.clientId === clientId ? token : undefined;
     }
 
     async getClient(clientId: string) {
