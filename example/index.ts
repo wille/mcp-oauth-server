@@ -33,6 +33,16 @@ const mcpAuthMiddleware = mcpAuthRouter({
     scopesSupported: ['mcp:tools'],
 });
 
+/**
+ * Everything on the consent screen comes from the query string, which the client controls -
+ * and with dynamic client registration, anyone can be a client. Interpolating it into HTML
+ * unescaped would let a crafted authorization link run script on the consent page, where it
+ * could approve the request on the user's behalf.
+ */
+function escapeHtml(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function main() {
     const app = express();
 
@@ -71,15 +81,15 @@ function main() {
         res.send(`
             <html>
                 <body>
-                    <h1>Login to ${clientName || resource}</h1>
+                    <h1>Login to ${escapeHtml(clientName || resource || 'unknown client')}</h1>
                     <form action="/confirm" method="POST">
                         <input type="text" name="user_id" placeholder="User ID to authenticate as" required>
                         <input type="submit" value="Give consent">
                         ${Object.entries(formFields)
-                            .map(([key, value]) => `<input type="hidden" name="${key}" value="${value}">`)
+                            .map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`)
                             .join('')}
                     </form>
-                    <pre>${JSON.stringify(Object.fromEntries(qs.entries()), null, 2)}</pre>
+                    <pre>${escapeHtml(JSON.stringify(Object.fromEntries(qs.entries()), null, 2))}</pre>
                 </body>
             </html>
         `);
