@@ -108,6 +108,16 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
      */
     revokeAccessToken(accessToken: string, clientId: string): Promise<AccessToken | undefined>;
 
+    /**
+     * Store a refresh token.
+     *
+     * Usually the token is new. It can also be one that {@link consumeRefreshToken} returned a
+     * moment ago: when a refresh request turns out to be invalid (a scope that was never
+     * granted, a wrong `resource`), the library puts the token back so the client can correct
+     * the request instead of losing its session. If you delete on consume, a plain insert
+     * covers both. If you keep consumed rows, make this an upsert that clears the consumed
+     * marker - throwing instead is tolerated, and leaves the token consumed.
+     */
     saveRefreshToken(token: RefreshToken, client: OAuthClientInformationFull): Promise<void>;
 
     /** Revoke a refresh token, scoped to `clientId` exactly as {@link revokeAccessToken} is. */

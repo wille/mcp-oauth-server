@@ -242,7 +242,7 @@ describe('OAuthServer.exchangeRefreshToken', () => {
         ).rejects.toThrow(InvalidTargetError);
     });
 
-    it('should reject refresh token exchange when resource is not provided in request but was in original token', async () => {
+    it('rejects a refresh without a resource under strictResource when the token was issued for one', async () => {
         const resourceUrl = new URL('http://localhost:3000/mcp');
         const refreshToken: RefreshToken = {
             token: 'refresh-token-resource-optional',
@@ -256,6 +256,107 @@ describe('OAuthServer.exchangeRefreshToken', () => {
         await model.saveRefreshToken(refreshToken, client);
 
         await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-resource-optional')).rejects.toThrow(InvalidTargetError);
+    });
+
+    describe('strictResource disabled', () => {
+        const resourceUrl = new URL('http://localhost:3000/mcp');
+        let lenientServer: OAuthServer;
+
+        beforeEach(async () => {
+            lenientServer = new OAuthServer({
+                model,
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                scopesSupported: ['mcp:tools', 'mcp:resources'],
+                strictResource: false,
+            });
+
+            await model.saveRefreshToken(
+                {
+                    token: 'refresh-token-lenient',
+                    clientId: client.client_id,
+                    userId: 'user-123',
+                    scopes: ['mcp:tools'],
+                    expiresAt: new Date(Date.now() + 1000000),
+                    resource: resourceUrl.href,
+                },
+                client,
+            );
+        });
+
+        it('accepts a refresh without a resource and keeps the tokens bound to the original one', async () => {
+            const result = await lenientServer.exchangeRefreshToken(client, 'refresh-token-lenient');
+
+            expect((await model.getAccessToken(result.access_token))?.resource).toBe(resourceUrl.href);
+            expect((await model.getRefreshToken(result.refresh_token!))?.resource).toBe(resourceUrl.href);
+        });
+
+        it('still rejects a resource that does not match', async () => {
+            await expect(
+                lenientServer.exchangeRefreshToken(client, 'refresh-token-lenient', undefined, new URL('http://localhost:3000/other')),
+            ).rejects.toThrow(InvalidTargetError);
+        });
+    });
+
+    describe('a request rejected for its own parameters does not cost the client its token', () => {
+        const resourceUrl = new URL('http://localhost:3000/mcp');
+
+        beforeEach(async () => {
+            await model.saveRefreshToken(
+                {
+                    token: 'refresh-token-retry',
+                    clientId: client.client_id,
+                    userId: 'user-123',
+                    scopes: ['mcp:tools'],
+                    expiresAt: new Date(Date.now() + 1000000),
+                    resource: resourceUrl.href,
+                },
+                client,
+            );
+        });
+
+        it('can be retried after invalid_scope', async () => {
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', ['mcp:resources'], resourceUrl)).rejects.toThrow(
+                InvalidScopeError,
+            );
+
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, resourceUrl)).resolves.toHaveProperty(
+                'access_token',
+            );
+        });
+
+        it('can be retried after a missing resource', async () => {
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry')).rejects.toThrow(InvalidTargetError);
+
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, resourceUrl)).resolves.toHaveProperty(
+                'access_token',
+            );
+        });
+
+        it('can be retried after a wrong resource', async () => {
+            await expect(
+                oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, new URL('http://localhost:3000/other')),
+            ).rejects.toThrow(InvalidTargetError);
+
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, resourceUrl)).resolves.toHaveProperty(
+                'access_token',
+            );
+        });
+
+        it('is still single-use once it has been redeemed', async () => {
+            await oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, resourceUrl);
+
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry', undefined, resourceUrl)).rejects.toThrow(
+                'Invalid refresh token',
+            );
+        });
+
+        it('reports the original error when the model refuses to take the token back', async () => {
+            model.saveRefreshToken = async () => {
+                throw new Error('duplicate key');
+            };
+
+            await expect(oauthServer.exchangeRefreshToken(client, 'refresh-token-retry')).rejects.toThrow(InvalidTargetError);
+        });
     });
 
     it('should preserve resource in new tokens', async () => {

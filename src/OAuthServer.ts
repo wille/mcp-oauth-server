@@ -717,26 +717,40 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
                 throw new InvalidGrantError('Refresh token has expired');
             }
 
-            // The requested scope must not include additional scopes that were not issued in the original access token.
-            // Typically this will not be included in the request, and if omitted,
-            // the service should issue an access token with the same scope as was previously issued.
-            if (scopes) {
-                if (!scopes.every((scope) => refreshTokenData.scopes.includes(scope))) {
-                    throw new InvalidScopeError('Invalid scope');
+            // Everything checked from here to the end of this block is a mistake in the request,
+            // not a problem with the token. The token is already consumed, so without putting
+            // it back a client that sent a wrong scope or forgot `resource` would lose its
+            // session to a 400 it could have corrected and retried. Restoring is safe: it is
+            // the same token the caller just presented, so nothing new is disclosed, and while
+            // it was gone any concurrent use of it failed closed.
+            try {
+                // The requested scope must not include additional scopes that were not issued in the original access token.
+                // Typically this will not be included in the request, and if omitted,
+                // the service should issue an access token with the same scope as was previously issued.
+                if (scopes) {
+                    if (!scopes.every((scope) => refreshTokenData.scopes.includes(scope))) {
+                        throw new InvalidScopeError('Invalid scope');
+                    }
+                } else {
+                    scopes = refreshTokenData.scopes;
                 }
-            } else {
-                scopes = refreshTokenData.scopes;
-            }
 
-            // If the refresh_token was issued with a resource indicator, the resource indicator in the token request must match the resource indicator in the refresh token.
-            if (refreshTokenData.resource) {
-                if (!resource) {
-                    throw new InvalidTargetError('Resource indicator is required');
+                // A refresh token issued for a resource only ever mints tokens for that resource.
+                if (refreshTokenData.resource) {
+                    if (resource) {
+                        if (!checkResourceAllowed({ requestedResource: resource, configuredResource: refreshTokenData.resource })) {
+                            throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${refreshTokenData.resource}`);
+                        }
+                    } else if (this.strictResource) {
+                        // Same rule as exchangeAuthorizationCode: with strictResource off, clients
+                        // that never send a resource indicator (ChatGPT, for one) are tolerated,
+                        // and the new tokens stay bound to the resource the grant was issued for.
+                        throw new InvalidTargetError('Resource indicator is required');
+                    }
                 }
-
-                if (!checkResourceAllowed({ requestedResource: resource, configuredResource: refreshTokenData.resource })) {
-                    throw new InvalidTargetError(`Invalid resource: ${resource}, expected: ${refreshTokenData.resource}`);
-                }
+            } catch (error) {
+                await this.restoreRefreshToken(refreshTokenData, client);
+                throw error;
             }
 
             const newAccessToken: AccessToken = {
@@ -1168,6 +1182,22 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         await this.model.saveRefreshToken(refreshToken, client);
 
         return refreshToken.token;
+    }
+
+    /**
+     * Puts back a refresh token that {@link exchangeRefreshToken} consumed and then could not
+     * use because the request was invalid.
+     *
+     * Best effort. A model that marks tokens as consumed rather than deleting them may refuse
+     * the write, and that must not replace the error the client is about to be told about - the
+     * token then simply stays consumed, which is what happened before this existed.
+     */
+    private async restoreRefreshToken(refreshToken: RefreshToken, client: OAuthClientInformationFull): Promise<void> {
+        try {
+            await this.model.saveRefreshToken(refreshToken, client);
+        } catch (error) {
+            log('could not restore refresh token after a rejected request', error);
+        }
     }
 
     /**

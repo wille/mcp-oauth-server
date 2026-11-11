@@ -29,6 +29,15 @@
   the default, and the consent URL carries it so your consent screen can show it.
 - `scope` is split on any run of whitespace. An empty `scope=` or a doubled space used to produce
   an empty-string scope and fail the request with `invalid_scope`.
+- `strictResource: false` was not honoured by the refresh token grant. A client that omitted
+  `resource` could redeem its authorization code but then got `invalid_target` on its first
+  refresh. The grant now requires `resource` only under `strictResource`, like the code exchange;
+  when it is sent it must still match, and the new tokens stay bound to the original resource.
+- A refresh request rejected for its own parameters (`invalid_scope`, `invalid_target`) no longer
+  costs the client its refresh token. The token had already been consumed by the time those
+  checks ran, so a retry with the corrected request failed with `invalid_grant` and the user had
+  to authorize again. The token is now put back through `saveRefreshToken` - see the note on that
+  method if your model keeps consumed rows instead of deleting them.
 
 ## 1.0.1
 
