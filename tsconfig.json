@@ -15,7 +15,7 @@
         "pretty": true,
         "skipLibCheck": true,
         "sourceMap": true,
-        "strictNullChecks": true,
+        "strict": true,
         "importHelpers": true,
         "noEmit": true,
         // "allowImportingTsExtensions": true

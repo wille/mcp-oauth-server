@@ -28,7 +28,7 @@ describe('allowedMethods', () => {
     });
 
     test('returns 405 for unspecified HTTP methods', async () => {
-        const methods = ['post', 'put', 'delete', 'patch'];
+        const methods = ['post', 'put', 'delete', 'patch'] as const;
 
         for (const method of methods) {
             const response = await request(app)[method]('/test');

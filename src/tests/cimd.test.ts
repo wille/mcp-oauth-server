@@ -81,7 +81,7 @@ describe('ClientIdMetadataDocumentFetcher', () => {
     it('returns an already-expired document when the response forbids caching', async () => {
         const fetch = vi.fn(async () =>
             jsonResponse(validDocument, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }),
-        ) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
+        ) as unknown as typeof globalThis.fetch & ReturnType<typeof vi.fn>;
         const fetcher = new ClientIdMetadataDocumentFetcher({ fetch });
 
         const { expiresAt } = await fetcher.fetchClient(CLIENT_ID);
@@ -348,7 +348,7 @@ describe('OAuthServer CIMD integration', () => {
     it('does not cache documents served with Cache-Control: no-store', async () => {
         const fetch = vi.fn(async () =>
             jsonResponse(validDocument, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } }),
-        ) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
+        ) as unknown as typeof globalThis.fetch & ReturnType<typeof vi.fn>;
         const { server, model } = createServer(validDocument, { fetch });
 
         await server.getClient(CLIENT_ID);
@@ -362,7 +362,7 @@ describe('OAuthServer CIMD integration', () => {
         vi.useFakeTimers();
         const fetch = vi.fn(async () =>
             jsonResponse(validDocument, { headers: { 'content-type': 'application/json', 'cache-control': 'max-age=60' } }),
-        ) as unknown as typeof fetch & ReturnType<typeof vi.fn>;
+        ) as unknown as typeof globalThis.fetch & ReturnType<typeof vi.fn>;
         const { server } = createServer(validDocument, { fetch });
 
         await server.getClient(CLIENT_ID);
