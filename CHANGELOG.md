@@ -13,6 +13,12 @@
   and `exchangeClientCredentials` answers `unauthorized_client` to any client without a
   `client_secret`, wherever it came from.
 
+### Fixed
+
+- `clientSecretLifetime: 0` is documented as "never expire" but was read with `||`, so it silently
+  became the 90-day default. It now yields `client_secret_expires_at: 0`, as RFC 7591 §3.2.1
+  specifies for a secret that does not expire.
+
 ## 1.0.1
 
 ### Added

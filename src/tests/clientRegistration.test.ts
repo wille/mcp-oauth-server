@@ -17,6 +17,32 @@ describe('OAuthServer Client Registration', () => {
         });
     });
 
+    describe('client secret expiry', () => {
+        const register = (options: { clientSecretLifetime?: number }) =>
+            new OAuthServer({
+                model: new MemoryOAuthServerModel(),
+                authorizationUrl: new URL('http://localhost:3000/consent'),
+                ...options,
+            }).registerClient({ redirect_uris: ['http://localhost:3000/callback'] });
+
+        it('expires secrets after 90 days by default', async () => {
+            const client = await register({});
+            expect(client.client_secret_expires_at).toBe(client.client_id_issued_at! + 90 * 24 * 60 * 60);
+        });
+
+        it('applies a configured lifetime', async () => {
+            const client = await register({ clientSecretLifetime: 60 });
+            expect(client.client_secret_expires_at).toBe(client.client_id_issued_at! + 60);
+        });
+
+        it('issues a secret that never expires when the lifetime is 0', async () => {
+            // RFC 7591 §3.2.1: client_secret_expires_at is 0 if the secret will not expire.
+            const client = await register({ clientSecretLifetime: 0 });
+            expect(client.client_secret).toBeDefined();
+            expect(client.client_secret_expires_at).toBe(0);
+        });
+    });
+
     describe('redirect_uris is required for redirect-based flows (RFC 7591 §2)', () => {
         it('rejects an empty redirect_uris for the authorization_code grant', async () => {
             await expect(

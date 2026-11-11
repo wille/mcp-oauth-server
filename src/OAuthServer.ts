@@ -272,7 +272,8 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         this.scopesSupported = options.scopesSupported;
         this.accessTokenLifetime = options.accessTokenLifetime || 3600;
         this.refreshTokenLifetime = options.refreshTokenLifetime || 3600 * 24 * 14;
-        this.clientSecretLifetime = options.clientSecretLifetime || 3 * 30 * 24 * 60 * 60;
+        // ?? rather than ||: 0 is a documented value meaning the secret never expires.
+        this.clientSecretLifetime = options.clientSecretLifetime ?? 3 * 30 * 24 * 60 * 60;
         this.authorizationCodeLifetime = options.authorizationCodeLifetime || 5 * 60;
         this.strictResource = options.strictResource ?? true;
         this.resourceServerUrl = options.resourceServerUrl ? resourceUrlFromServerUrl(options.resourceServerUrl) : undefined;
