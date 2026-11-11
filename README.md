@@ -339,6 +339,24 @@ Endpoints (paths are relative to where you mount the router and to `baseUrl` / i
 
 Install at the application root (see [`src/router.ts`](src/router.ts)).
 
+#### Rate limiting
+
+Every endpoint is rate limited per IP with [`express-rate-limit`](https://github.com/express-rate-limit/express-rate-limit). Override or disable a limiter through the per-route options (`authorizationOptions`, `tokenOptions`, `clientRegistrationOptions`, `revocationOptions`, `deviceAuthorizationOptions`), each of which takes `rateLimit`: `express-rate-limit` options, or `false`.
+
+```ts
+mcpAuthRouter({
+    provider: oauthServer,
+    tokenOptions: {
+        rateLimit: { max: 500 },
+        devicePollRateLimit: { max: 1000 },
+    },
+});
+```
+
+- **The defaults are sized for individual users, not for hosted clients.** `/token` allows 50 requests per 15 minutes per IP. A hosted MCP client (Claude, ChatGPT, ...) exchanges and refreshes tokens for all of its users from a small set of addresses, so raise `tokenOptions.rateLimit.max` - or key the limiter on something other than the IP - before you put real traffic on it.
+- **Device polls are limited separately.** A device polls `/token` every `devicePollIntervalSeconds` until the user answers, which is far more traffic than the general limit allows. `tokenOptions.devicePollRateLimit` counts those requests on their own, defaulting to twice what one device polling at the advertised interval sends per window. A device that polls faster than its interval is answered with `slow_down`, independently of this limiter.
+- **Behind a reverse proxy, set Express's [`trust proxy`](https://expressjs.com/en/guide/behind-proxies.html).** Otherwise every request appears to come from the proxy and all clients share one bucket.
+
 #### Serving protected resource metadata for more than one path
 
 `mcpAuthRouter` serves one protected resource document, at the well-known path derived from `resourceServerUrl`. Clients following the MCP discovery order try the path of the MCP endpoint first and the root second, so a server that announces its metadata on the root and also hosts an endpoint at `/mcp` can serve the path-specific document too. `createOAuthMetadata` builds the authorization server metadata `mcpAuthMetadataRouter` needs for that:

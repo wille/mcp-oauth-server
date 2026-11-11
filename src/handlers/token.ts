@@ -22,7 +22,31 @@ export type TokenHandlerOptions = {
      * Set to false to disable rate limiting for this endpoint.
      */
     rateLimit?: Partial<RateLimitOptions> | false;
+    /**
+     * Rate limiting for device authorization polls (`grant_type` of
+     * `urn:ietf:params:oauth:grant-type:device_code`), which are counted separately from
+     * every other token request.
+     *
+     * A device is told to poll every {@link OAuthServer.devicePollIntervalSeconds} for as long
+     * as the user takes, so one well-behaved device sends far more requests than
+     * {@link rateLimit} is sized for - 180 in fifteen minutes at the default five seconds.
+     * Counting those against the general limit locked devices out a few minutes into a flow.
+     *
+     * Defaults to twice what a single device polling at the advertised interval sends in the
+     * window, per IP. Pacing of an individual device code is not this limiter's job: the grant
+     * answers `slow_down` to a device that polls faster than its interval.
+     *
+     * Set to false to disable. Also disabled when {@link rateLimit} is false and this is unset.
+     * Only applies when the provider has the device grant enabled.
+     */
+    devicePollRateLimit?: Partial<RateLimitOptions> | false;
 };
+
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+
+function isDevicePoll(req: express.Request): boolean {
+    return req.body?.grant_type === DEVICE_AUTHORIZATION_GRANT_TYPE;
+}
 
 const TokenRequestSchema = z.object({
     grant_type: z.string(),
@@ -56,23 +80,49 @@ function assertClientSupportsGrant(client: { grant_types?: string[] }, grantType
     }
 }
 
-export function tokenHandler({ provider, rateLimit: rateLimitConfig }: TokenHandlerOptions): RequestHandler {
+export function tokenHandler({
+    provider,
+    rateLimit: rateLimitConfig,
+    devicePollRateLimit: devicePollRateLimitConfig = rateLimitConfig === false ? false : undefined,
+}: TokenHandlerOptions): RequestHandler {
+    const deviceGrantEnabled = provider.grantTypes.includes(DEVICE_AUTHORIZATION_GRANT_TYPE);
+
     // Nested router so we can configure middleware and restrict HTTP method
     const router = express.Router();
 
     router.use(allowedMethods(['POST']));
     router.use(express.urlencoded({ extended: false }));
 
-    // Apply rate limiting unless explicitly disabled
+    // Apply rate limiting unless explicitly disabled. The body is parsed above, so the limiters
+    // can tell device polls from everything else.
     if (rateLimitConfig !== false) {
+        const callerSkip = rateLimitConfig?.skip;
         router.use(
             rateLimit({
-                windowMs: 15 * 60 * 1000, // 15 minutes
+                windowMs: RATE_LIMIT_WINDOW_MS,
                 max: 50, // 50 requests per windowMs
                 standardHeaders: true,
                 legacyHeaders: false,
                 message: new TooManyRequestsError('You have exceeded the rate limit for token requests').toResponseObject(),
                 ...rateLimitConfig,
+                // Device polls have their own limiter below.
+                skip: deviceGrantEnabled ? async (req, res) => isDevicePoll(req) || ((await callerSkip?.(req, res)) ?? false) : callerSkip,
+            }),
+        );
+    }
+
+    if (deviceGrantEnabled && devicePollRateLimitConfig !== false) {
+        const windowMs = devicePollRateLimitConfig?.windowMs ?? RATE_LIMIT_WINDOW_MS;
+        const pollsPerWindow = Math.ceil(windowMs / 1000 / Math.max(provider.devicePollIntervalSeconds, 1));
+        router.use(
+            rateLimit({
+                windowMs,
+                max: pollsPerWindow * 2,
+                standardHeaders: true,
+                legacyHeaders: false,
+                message: new TooManyRequestsError('You have exceeded the rate limit for device authorization polls').toResponseObject(),
+                skip: (req) => !isDevicePoll(req),
+                ...devicePollRateLimitConfig,
             }),
         );
     }

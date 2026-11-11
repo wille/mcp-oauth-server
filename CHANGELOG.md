@@ -38,6 +38,12 @@
   checks ran, so a retry with the corrected request failed with `invalid_grant` and the user had
   to authorize again. The token is now put back through `saveRefreshToken` - see the note on that
   method if your model keeps consumed rows instead of deleting them.
+- A device following the advertised polling interval was rate limited out of its own flow. The
+  token endpoint allowed 50 requests per 15 minutes per IP, and a device polling every 5 seconds
+  sends 180 in that time, so it started receiving 429 about four minutes in. Device polls are now
+  counted by their own limiter, sized from `devicePollIntervalSeconds` (360 per 15 minutes at the
+  default), and no longer count against the general token limit. Tune or disable it with the new
+  `tokenOptions.devicePollRateLimit`; `rateLimit: false` still disables both.
 
 ## 1.0.1
 
