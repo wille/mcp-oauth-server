@@ -141,12 +141,35 @@ describe('OAuthServer.exchangeRefreshToken', () => {
 
         expect(result.scope).toBe('mcp:tools');
 
-        // New tokens should have the requested scopes
+        // The access token has the requested scopes
         const newAccessToken = await model.getAccessToken(result.access_token!);
         expect(newAccessToken?.scopes).toEqual(['mcp:tools']);
 
+        // The rotated refresh token keeps the scopes that were granted (RFC 6749 §6)
         const newRefreshToken = await model.getRefreshToken(result.refresh_token!);
-        expect((newRefreshToken as any).scopes).toEqual(['mcp:tools']);
+        expect(newRefreshToken?.scopes).toEqual(['mcp:tools', 'mcp:resources']);
+    });
+
+    it('lets a later refresh ask for the full grant again after a narrowed one', async () => {
+        await model.saveRefreshToken(
+            {
+                token: 'refresh-token-narrow',
+                clientId: client.client_id,
+                userId: 'user-789',
+                scopes: ['mcp:tools', 'mcp:resources'],
+                expiresAt: new Date(Date.now() + 1000000),
+            },
+            client,
+        );
+
+        const narrowed = await oauthServer.exchangeRefreshToken(client, 'refresh-token-narrow', ['mcp:tools']);
+        expect(narrowed.scope).toBe('mcp:tools');
+
+        const widened = await oauthServer.exchangeRefreshToken(client, narrowed.refresh_token!, ['mcp:tools', 'mcp:resources']);
+        expect(widened.scope).toBe('mcp:tools mcp:resources');
+
+        const byDefault = await oauthServer.exchangeRefreshToken(client, widened.refresh_token!);
+        expect(byDefault.scope).toBe('mcp:tools mcp:resources');
     });
 
     it('should throw error when refresh token is invalid', async () => {

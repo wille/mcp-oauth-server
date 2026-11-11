@@ -790,9 +790,14 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
             await this.model.saveAccessToken(newAccessToken, client);
 
             // Both preconditions were checked above, so this always rotates the token.
+            //
+            // The rotated token carries the scopes of the one it replaces, not the subset this
+            // request asked for (RFC 6749 §6). Narrowing applies to the access token being
+            // issued; the grant the user approved is unchanged, and a later refresh may ask
+            // for all of it again.
             const rotatedRefreshToken = await this.issueRefreshToken(client, {
                 userId: refreshTokenData.userId,
-                scopes: scopes || [],
+                scopes: refreshTokenData.scopes,
                 resource: refreshTokenData.resource,
                 grantId: refreshTokenData.grantId,
             });

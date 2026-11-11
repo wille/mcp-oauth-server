@@ -85,6 +85,10 @@
 - Creating an `OAuthServer` without a `model` under `NODE_ENV=production` emits a one-time
   `MCP_OAUTH_MEMORY_MODEL` warning: the in-memory default loses everything on restart and is not
   shared between instances.
+- A refresh request for a subset of the granted scopes narrowed the grant for good: the rotated
+  refresh token was stored with the subset, so the client could never get the other scopes back
+  without sending the user through authorization again. The subset now applies to the access
+  token only, and the rotated refresh token keeps the granted scopes, as RFC 6749 §6 specifies.
 - A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
   back the whole device authorization it had read at the start of the request, so with any model
   that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`
