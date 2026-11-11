@@ -1047,14 +1047,13 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
 
             const now = Date.now();
             if (device.lastPollResponseAtMs !== undefined && now - device.lastPollResponseAtMs < device.pollIntervalSeconds * 1000) {
-                device.pollIntervalSeconds += 5;
-                device.lastPollResponseAtMs = now;
-                await this.model.saveDeviceAuthorization!(device);
+                // RFC 8628 §3.5: slow_down raises the interval by 5 seconds for this and all
+                // subsequent requests.
+                await this.recordDevicePoll(device, now, device.pollIntervalSeconds + 5);
                 throw new SlowDownError('Polling too frequently');
             }
 
-            device.lastPollResponseAtMs = now;
-            await this.model.saveDeviceAuthorization!(device);
+            await this.recordDevicePoll(device, now, device.pollIntervalSeconds);
             throw new AuthorizationPendingError('The authorization request is still pending');
         } catch (error) {
             this.errorHandler('exchangeDeviceCode', error, { client, deviceCode });
@@ -1182,6 +1181,27 @@ export class OAuthServer implements OAuthServerOptions, OAuthRegisteredClientsSt
         await this.model.saveRefreshToken(refreshToken, client);
 
         return refreshToken.token;
+    }
+
+    /**
+     * Records that a pending device authorization was just polled.
+     *
+     * `device` was read a moment ago and the user may have approved or denied it since, so it
+     * must not be written back whole: that would reset the status to `pending` and the user's
+     * answer would be lost. {@link OAuthServerModel.recordDeviceAuthorizationPoll} updates only
+     * the polling fields, and only while the authorization is still pending.
+     *
+     * Models written before that method existed fall back to saving the whole record, which
+     * keeps them working but leaves them exposed to exactly that lost update.
+     */
+    private async recordDevicePoll(device: DeviceAuthorization, lastPollResponseAtMs: number, pollIntervalSeconds: number): Promise<void> {
+        if (this.model.recordDeviceAuthorizationPoll) {
+            await this.model.recordDeviceAuthorizationPoll(device.deviceCode, { lastPollResponseAtMs, pollIntervalSeconds });
+            return;
+        }
+
+        log('model has no recordDeviceAuthorizationPoll: saving the whole device authorization, which can overwrite a concurrent approval');
+        await this.model.saveDeviceAuthorization!({ ...device, lastPollResponseAtMs, pollIntervalSeconds });
     }
 
     /**

@@ -168,6 +168,20 @@ export class MemoryOAuthServerModel implements OAuthServerModel {
     }
 
     /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
+    async recordDeviceAuthorizationPoll(
+        deviceCode: string,
+        poll: { lastPollResponseAtMs: number; pollIntervalSeconds: number },
+    ): Promise<DeviceAuthorization | undefined> {
+        const device = this.deviceByDeviceCode.get(deviceCode);
+        if (!device || device.status !== 'pending') {
+            return undefined;
+        }
+        device.lastPollResponseAtMs = poll.lastPollResponseAtMs;
+        device.pollIntervalSeconds = poll.pollIntervalSeconds;
+        return device;
+    }
+
+    /** Atomic for the same reason as {@link consumeAuthorizationCode}. */
     async resolvePendingDeviceAuthorization(
         normalizedUserCode: string,
         status: 'approved' | 'denied',

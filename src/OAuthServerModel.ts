@@ -85,6 +85,31 @@ export interface OAuthServerModel extends OAuthRegisteredClientsStore {
         userId?: string,
     ): Promise<DeviceAuthorization | undefined>;
 
+    /**
+     * Record a poll against a **pending** device authorization: set the two polling fields and
+     * nothing else, atomically, and only if the authorization is still pending. Returns the
+     * updated record, or `undefined` if it is no longer pending.
+     *
+     * ```sql
+     * UPDATE device_authorizations
+     *    SET last_poll_response_at_ms = $2, poll_interval_seconds = $3
+     *  WHERE device_code = $1 AND status = 'pending'
+     *  RETURNING *
+     * ```
+     *
+     * Optional for backwards compatibility, but implement it if you support the device grant.
+     * A device polls every few seconds while the user is deciding, and each poll has to store
+     * when it happened. Without this method the library can only do that by writing back the
+     * whole record it read at the start of the request - so a poll that overlaps the user's
+     * approval puts `status` back to `pending`, the device never receives its tokens, and the
+     * user is asked for a code that no longer does anything. The same overlap can undo a
+     * denial. The `status = 'pending'` condition and the narrow `SET` are what prevent it.
+     */
+    recordDeviceAuthorizationPoll?(
+        deviceCode: string,
+        poll: { lastPollResponseAtMs: number; pollIntervalSeconds: number },
+    ): Promise<DeviceAuthorization | undefined>;
+
     saveAccessToken(token: AccessToken, client: OAuthClientInformationFull): Promise<void>;
     getAccessToken(accessToken: string): Promise<AccessToken | undefined>;
 

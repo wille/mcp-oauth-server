@@ -44,6 +44,14 @@
   counted by their own limiter, sized from `devicePollIntervalSeconds` (360 per 15 minutes at the
   default), and no longer count against the general token limit. Tune or disable it with the new
   `tokenOptions.devicePollRateLimit`; `rateLimit: false` still disables both.
+- A device poll could undo the user's answer. Each pending poll stored its timestamp by saving
+  back the whole device authorization it had read at the start of the request, so with any model
+  that returns copies - every database - a poll overlapping the approval wrote `status: 'pending'`
+  over it and the device never got its tokens; a denial could be undone the same way. Poll
+  bookkeeping now goes through a new model method, `recordDeviceAuthorizationPoll`, which updates
+  only the polling fields and only while the authorization is pending. **Custom models supporting
+  the device grant should implement it** - it is optional so existing models keep working, but
+  they keep the race until they do. `MemoryOAuthServerModel` implements it.
 
 ## 1.0.1
 

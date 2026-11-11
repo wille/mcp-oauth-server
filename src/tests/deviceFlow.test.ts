@@ -222,3 +222,97 @@ describe('RFC 8628 device authorization grant', () => {
         expect(poll.body.error).toBe('access_denied');
     });
 });
+
+describe("device poll bookkeeping does not overwrite the user's answer", () => {
+    /**
+     * Behaves like a database: every read hands back a copy, so a record read at the start of a
+     * request goes stale as soon as another request changes the row. `afterRead` runs once,
+     * between a poll's read and its write, which is where the overlapping approval lands.
+     */
+    class CopyingModel extends MemoryOAuthServerModel {
+        afterRead?: () => Promise<void>;
+
+        async getDeviceAuthorizationByDeviceCode(deviceCode: string) {
+            const device = await super.getDeviceAuthorizationByDeviceCode(deviceCode);
+            const copy = device && { ...device };
+            const hook = this.afterRead;
+            this.afterRead = undefined;
+            await hook?.();
+            return copy;
+        }
+
+        async saveDeviceAuthorization(device: Parameters<MemoryOAuthServerModel['saveDeviceAuthorization']>[0]) {
+            await super.saveDeviceAuthorization({ ...device });
+        }
+    }
+
+    const client = {
+        client_id: 'device-client',
+        redirect_uris: [],
+        grant_types: [DEVICE_AUTHORIZATION_GRANT_TYPE, 'refresh_token'],
+    };
+
+    function createProvider(model: CopyingModel) {
+        return new OAuthServer({
+            model,
+            authorizationUrl: new URL('http://127.0.0.1/consent'),
+            deviceAuthorizationUrl: new URL('http://127.0.0.1/device'),
+            grantTypes: ['authorization_code', 'refresh_token', DEVICE_AUTHORIZATION_GRANT_TYPE],
+            strictResource: false,
+        });
+    }
+
+    it('keeps an approval that lands while a poll is in flight', async () => {
+        const model = new CopyingModel();
+        const provider = createProvider(model);
+        const device = await provider.requestDeviceAuthorization(client, {});
+
+        model.afterRead = () => provider.approveDeviceAuthorization(device.user_code, 'user-1');
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({
+            errorCode: 'authorization_pending',
+        });
+
+        const tokens = await provider.exchangeDeviceCode(client, device.device_code);
+        expect(tokens.access_token).toBeTruthy();
+    });
+
+    it('keeps a denial that lands while a poll is in flight', async () => {
+        const model = new CopyingModel();
+        const provider = createProvider(model);
+        const device = await provider.requestDeviceAuthorization(client, {});
+
+        model.afterRead = () => provider.denyDeviceAuthorization(device.user_code);
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({
+            errorCode: 'authorization_pending',
+        });
+
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({ errorCode: 'access_denied' });
+    });
+
+    it('still records polls, so slow_down keeps working and the interval grows', async () => {
+        const model = new CopyingModel();
+        const provider = createProvider(model);
+        const device = await provider.requestDeviceAuthorization(client, {});
+
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({
+            errorCode: 'authorization_pending',
+        });
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({ errorCode: 'slow_down' });
+
+        const stored = await model.getDeviceAuthorizationByDeviceCode(device.device_code);
+        expect(stored?.pollIntervalSeconds).toBe(device.interval + 5);
+        expect(stored?.status).toBe('pending');
+    });
+
+    it('falls back to saving the record for a model without recordDeviceAuthorizationPoll', async () => {
+        const model = new CopyingModel();
+        (model as { recordDeviceAuthorizationPoll?: unknown }).recordDeviceAuthorizationPoll = undefined;
+        const provider = createProvider(model);
+        const device = await provider.requestDeviceAuthorization(client, {});
+
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({
+            errorCode: 'authorization_pending',
+        });
+        await expect(provider.exchangeDeviceCode(client, device.device_code)).rejects.toMatchObject({ errorCode: 'slow_down' });
+    });
+});

@@ -111,7 +111,7 @@ const oauthServer = new OAuthServer({
 });
 ```
 
-3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization`) - see `MemoryOAuthServerModel` for a reference.
+3. Implement the device-related methods on `OAuthServerModel` (`saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization`) - see `MemoryOAuthServerModel` for a reference. Also implement `recordDeviceAuthorizationPoll`: it is optional for backwards compatibility, but without it a poll that overlaps the user's approval can reset the authorization to pending.
 
 The auth router exposes **`POST /device`** (under your AS base path) when the device grant and `deviceAuthorizationUrl` are configured. Metadata lists `device_authorization_endpoint` accordingly.
 
@@ -296,7 +296,7 @@ export class PostgresModel implements OAuthServerModel {
 
     Atomicity is what makes the grant single-use (OAuth 2.1 §4.1.3): a read followed by a separate delete lets two concurrent requests each be issued their own tokens. Matching on the client id in the same statement means a request from the wrong client consumes nothing, so it cannot invalidate a grant another client is about to redeem.
 
-- Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization` when the device grant is enabled. The last two carry the same atomicity requirement: a device code must yield tokens to only one poll, and a pending authorization must move to `approved` or `denied` exactly once.
+- Device grant: `saveDeviceAuthorization`, `getDeviceAuthorizationByDeviceCode`, `getDeviceAuthorizationByUserCode`, `deleteDeviceAuthorization`, `consumeApprovedDeviceAuthorization`, `resolvePendingDeviceAuthorization` when the device grant is enabled. The last two carry the same atomicity requirement: a device code must yield tokens to only one poll, and a pending authorization must move to `approved` or `denied` exactly once. `recordDeviceAuthorizationPoll` is optional but strongly recommended: it stores a poll's timestamp with `UPDATE ... WHERE device_code = $1 AND status = 'pending'`, so a poll that overlaps the user's answer cannot write `pending` back over it.
 - CIMD: `saveClientIdMetadataDocument`, `getClientIdMetadataDocument` when [`clientIdMetadataDocuments`](#client-id-metadata-documents-cimd) is enabled.
 - Tokens: `saveAccessToken`, `getAccessToken`, `revokeAccessToken`, `saveRefreshToken`, `revokeRefreshToken`.
 - `revokeAccessToken` and `revokeRefreshToken` take the requesting client's id and **must only revoke a token issued to that client** (`DELETE ... WHERE token = $1 AND client_id = $2 RETURNING *`). RFC 7009 §2.1 requires the revocation endpoint to verify ownership; letting the store decide keeps §2.2's "always answer 200" rule intact, so revocation cannot be used to probe for another client's tokens. Never throw when nothing matches - return the removed record, or `undefined`.
